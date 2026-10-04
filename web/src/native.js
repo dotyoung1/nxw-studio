@@ -176,8 +176,12 @@ NATIVE.onScan = ev => {
     toast('Found ' + NATIVE.plugins.length + (NATIVE.plugins.length === 1 ? ' plugin' : ' plugins') + (failed ? '. ' + failed + ' could not be opened and were skipped.' : ''));
     hint(NATIVE.plugins.length ? 'Your plugins are in the browser under Plugin database' : 'No VST3 plugins found. Add a folder under Plugin database › Plugin folders');
   }
-  NATIVE.pluginsVer++;
-  if (UI.br) UI.br.render();
+  // While scanning, the browser's progress row is refreshed a few times a second at most.
+  clearTimeout(NATIVE.scanRender);
+  const now = performance.now();
+  const refresh = () => { NATIVE.scanRenderAt = performance.now(); NATIVE.pluginsVer++; if (UI.br) UI.br.render(); };
+  if (!ev.running || now - (NATIVE.scanRenderAt || 0) > 250) refresh();
+  else NATIVE.scanRender = setTimeout(refresh, 250);
 };
 NATIVE.pluginRef = p => ({ id: p.id, name: p.name, vendor: p.vendor || '', format: p.format || 'VST3', instrument: !!p.instrument });
 NATIVE.addPluginChannel = id => {
