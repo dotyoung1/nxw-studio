@@ -1,0 +1,211 @@
+name: Build
+
+# Every push to main builds the Windows installer and runs the tests.
+# Pushing a tag like v0.3.0 also publishes a GitHub release with the installer
+# (the app's "Check for updates" looks at the latest release).
+# macOS builds run on tags, or on demand from the Actions tab.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      macos:
+        description: Also build the macOS app
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JUCE_TAG: '8.0.9'
+  WEBVIEW2_VERSION: '1.0.1901.177'
+
+jobs:
+  #------------------------------------------------------------------------------------------------
+  windows:
+    name: Windows app and installer
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version
+        id: v
+        shell: bash
+        run: |
+          v=$(tr -d '[:space:]' < VERSION)
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF#refs/tags/v}"; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "$v" > VERSION
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: WebView2 SDK
+        shell: pwsh
+        run: nuget install Microsoft.Web.WebView2 -Version $env:WEBVIEW2_VERSION -OutputDirectory "$env:RUNNER_TEMP\nuget"
+
+      - name: Configure
+        shell: pwsh
+        run: >
+          cmake -S desktop -B build -G "Visual Studio 17 2022" -A x64
+          -DJUCE_WEBVIEW2_PACKAGE_LOCATION="$env:RUNNER_TEMP\nuget"
+          -DNXW_GITHUB_REPO="${{ github.repository }}"
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Test - render the demo song headless
+        shell: pwsh
+        run: |
+          $exe = "build\NXWStudio_artefacts\Release\NXW Studio.exe"
+          $p = Start-Process -FilePath $exe -ArgumentList '--nxw-render', 'tests\demo.json', "$env:RUNNER_TEMP\demo.wav", '--stems' `
+                 -Wait -PassThru -NoNewWindow -RedirectStandardOutput "$env:RUNNER_TEMP\render.txt"
+          Get-Content "$env:RUNNER_TEMP\render.txt"
+          if ($p.ExitCode -ne 0) { throw "render failed with exit code $($p.ExitCode)" }
+          if ((Get-Item "$env:RUNNER_TEMP\demo.wav").Length -lt 1000000) { throw "render too short" }
+
+      - name: Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+
+      - name: Installer and portable zip
+        shell: pwsh
+        run: |
+          $v = "${{ steps.v.outputs.version }}"
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Invoke-WebRequest "https://go.microsoft.com/fwlink/p/?LinkId=2124703" -OutFile installer\windows\MicrosoftEdgeWebview2Setup.exe
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /Qp "/DAppVersion=$v" "/DSourceExe=$PWD\build\NXWStudio_artefacts\Release\NXW Studio.exe" "/DOutputDir=$PWD\dist" installer\windows\nxw-studio.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed" }
+          $portable = "dist\portable"
+          New-Item -ItemType Directory -Force $portable | Out-Null
+          Copy-Item "build\NXWStudio_artefacts\Release\NXW Studio.exe" $portable
+          Copy-Item installer\windows\README-portable.txt "$portable\README.txt"
+          Compress-Archive -Path "$portable\*" -DestinationPath "dist\NXW-Studio-$v-Windows-portable.zip" -Force
+          Remove-Item -Recurse $portable
+          Get-ChildItem dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NXW-Studio-${{ steps.v.outputs.version }}-Windows
+          path: dist/*
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe
+          path: build/NXWStudio_artefacts/Release/NXW Studio.exe
+          retention-days: 3
+
+  #------------------------------------------------------------------------------------------------
+  windows-plugins:
+    name: Windows plugin hosting test
+    needs: windows
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-exe
+          path: app
+      - name: Build the test plugins
+        run: |
+          cmake -S tests/plugins -B build-plugins -G "Visual Studio 17 2022" -A x64
+          cmake --build build-plugins --config Release --parallel
+      - name: Plugin self-test and scanner
+        shell: pwsh
+        run: |
+          $exe = "app\NXW Studio.exe"
+          $synth = (Resolve-Path "build-plugins\NXWTestSynth_artefacts\Release\VST3\NXW Test Synth.vst3").Path
+          $gain  = (Resolve-Path "build-plugins\NXWTestGain_artefacts\Release\VST3\NXW Test Gain.vst3").Path
+          $p = Start-Process -FilePath $exe -ArgumentList '--nxw-plugin-selftest', "`"$synth`"", "`"$gain`"" -Wait -PassThru -NoNewWindow -RedirectStandardOutput selftest.txt
+          Get-Content selftest.txt
+          if ($p.ExitCode -ne 0) { throw "plugin self-test failed" }
+          $p = Start-Process -FilePath $exe -ArgumentList '--nxw-scan', "`"$synth`"", "`"$env:RUNNER_TEMP\scan.xml`"" -Wait -PassThru -NoNewWindow
+          Get-Content "$env:RUNNER_TEMP\scan.xml"
+          if ($p.ExitCode -ne 0) { throw "scanner failed" }
+
+  #------------------------------------------------------------------------------------------------
+  linux-tests:
+    name: Linux build and tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libasound2-dev libcurl4-openssl-dev libfreetype-dev libfontconfig1-dev \
+            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxinerama-dev libxrandr-dev libxrender-dev \
+            libwebkit2gtk-4.1-dev libglu1-mesa-dev xvfb
+      - name: Build app and test plugins
+        run: |
+          cmake -S desktop -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+          cmake -S tests/plugins -B build-plugins -G Ninja -DCMAKE_BUILD_TYPE=Release -DFETCHCONTENT_SOURCE_DIR_JUCE="$PWD/build/_deps/juce-src"
+          cmake --build build-plugins
+      - name: Render test
+        run: '"build/NXWStudio_artefacts/Release/NXW Studio" --nxw-render tests/demo.json "$RUNNER_TEMP/demo.wav" --stems'
+      - name: Plugin self-test
+        run: |
+          "build/NXWStudio_artefacts/Release/NXW Studio" --nxw-plugin-selftest \
+            "build-plugins/NXWTestSynth_artefacts/Release/VST3/NXW Test Synth.vst3" \
+            "build-plugins/NXWTestGain_artefacts/Release/VST3/NXW Test Gain.vst3"
+      - name: Interface test (app running in a virtual display)
+        run: scripts/ui-test.sh "build/NXWStudio_artefacts/Release/NXW Studio" build-plugins
+
+  #------------------------------------------------------------------------------------------------
+  macos:
+    name: macOS app
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.macos)
+    runs-on: macos-14
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version
+        id: v
+        run: |
+          v=$(tr -d '[:space:]' < VERSION)
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF#refs/tags/v}"; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "$v" > VERSION
+      - name: Build
+        run: |
+          cmake -S desktop -B build -G Xcode -DNXW_GITHUB_REPO="${{ github.repository }}"
+          cmake --build build --config Release -- -quiet
+      - name: Package
+        run: |
+          mkdir -p dist
+          ditto -c -k --keepParent "build/NXWStudio_artefacts/Release/NXW Studio.app" "dist/NXW-Studio-${{ steps.v.outputs.version }}-macOS.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NXW-Studio-${{ steps.v.outputs.version }}-macOS
+          path: dist/*
+
+  #------------------------------------------------------------------------------------------------
+  release:
+    name: Publish release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, windows-plugins, linux-tests, macos]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: NXW-Studio-*
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true

@@ -1,0 +1,6 @@
+* text=auto eol=lf
+installer/windows/*.iss text eol=crlf
+installer/windows/*.txt text eol=crlf
+*.png binary
+*.ico binary
+*.woff2 binary

@@ -1,0 +1,1610 @@
+{
+ "v": 1,
+ "name": "Verdigris",
+ "bpm": 124,
+ "swing": 0.12,
+ "master": 0.8,
+ "channels": [
+  {
+   "id": "15isoi2s",
+   "name": "Kick Deep",
+   "type": "drum",
+   "color": "#3dd0ae",
+   "vol": 0.78,
+   "pan": 0,
+   "mute": false,
+   "mixer": 1,
+   "root": 60,
+   "params": {
+    "kind": "kick",
+    "tune": 0,
+    "decay": 1,
+    "tone": 0.45,
+    "level": 1
+   }
+  },
+  {
+   "id": "rxvb1znb",
+   "name": "Clap Wide",
+   "type": "drum",
+   "color": "#ee9663",
+   "vol": 0.78,
+   "pan": 0,
+   "mute": false,
+   "mixer": 2,
+   "root": 60,
+   "params": {
+    "kind": "clap",
+    "tune": 0,
+    "decay": 1.1,
+    "tone": 0.5,
+    "level": 0.85
+   }
+  },
+  {
+   "id": "2ytk44zv",
+   "name": "Snare Crisp",
+   "type": "drum",
+   "color": "#ff8090",
+   "vol": 0.78,
+   "pan": 0,
+   "mute": false,
+   "mixer": 2,
+   "root": 60,
+   "params": {
+    "kind": "snare",
+    "tune": 0,
+    "decay": 0.9,
+    "tone": 0.55,
+    "level": 0.75
+   }
+  },
+  {
+   "id": "8h1zhtta",
+   "name": "Hat Tight",
+   "type": "drum",
+   "color": "#f2c14e",
+   "vol": 0.78,
+   "pan": 0.14,
+   "mute": false,
+   "mixer": 3,
+   "root": 60,
+   "params": {
+    "kind": "hat",
+    "tune": 0,
+    "decay": 1,
+    "tone": 0.55,
+    "level": 0.7
+   }
+  },
+  {
+   "id": "lwiq53ue",
+   "name": "Hat Open",
+   "type": "drum",
+   "color": "#cdd65e",
+   "vol": 0.78,
+   "pan": -0.1,
+   "mute": false,
+   "mixer": 3,
+   "root": 60,
+   "params": {
+    "kind": "ohat",
+    "tune": 0,
+    "decay": 0.85,
+    "tone": 0.5,
+    "level": 0.55
+   }
+  },
+  {
+   "id": "sr5ce1qt",
+   "name": "Rim Click",
+   "type": "drum",
+   "color": "#5cc6e6",
+   "vol": 0.78,
+   "pan": -0.3,
+   "mute": false,
+   "mixer": 3,
+   "root": 60,
+   "params": {
+    "kind": "rim",
+    "tune": 0,
+    "decay": 1,
+    "tone": 0.5,
+    "level": 0.5
+   }
+  },
+  {
+   "id": "cc7hiery",
+   "name": "Reese Bass",
+   "type": "synth",
+   "color": "#7ea6ff",
+   "vol": 0.74,
+   "pan": 0,
+   "mute": false,
+   "mixer": 4,
+   "root": 60,
+   "params": {
+    "w1": "sawtooth",
+    "w2": "sawtooth",
+    "semi2": 0,
+    "det": 18,
+    "mix": 0.5,
+    "sub": 0.55,
+    "uni": 1,
+    "spread": 0,
+    "cut": 620,
+    "res": 1.8,
+    "env": 0.4,
+    "fatt": 0.004,
+    "fdec": 0.22,
+    "att": 0.003,
+    "dec": 0.4,
+    "sus": 0.85,
+    "rel": 0.1,
+    "gain": 0.62
+   },
+   "preset": "Reese Bass"
+  },
+  {
+   "id": "gzc76smu",
+   "name": "Verdigris Pad",
+   "type": "synth",
+   "color": "#b9a0ff",
+   "vol": 0.72,
+   "pan": 0,
+   "mute": false,
+   "mixer": 5,
+   "root": 60,
+   "params": {
+    "w1": "sawtooth",
+    "w2": "sawtooth",
+    "semi2": 12,
+    "det": 6,
+    "mix": 0.3,
+    "sub": 0,
+    "uni": 5,
+    "spread": 24,
+    "cut": 2200,
+    "res": 0.9,
+    "env": 0.2,
+    "fatt": 0.6,
+    "fdec": 1.6,
+    "att": 0.32,
+    "dec": 1.2,
+    "sus": 0.8,
+    "rel": 1.3,
+    "gain": 0.4
+   },
+   "preset": "Verdigris Pad"
+  },
+  {
+   "id": "g06jp16j",
+   "name": "Glass Pluck",
+   "type": "synth",
+   "color": "#d987d4",
+   "vol": 0.7,
+   "pan": 0,
+   "mute": false,
+   "mixer": 6,
+   "root": 60,
+   "params": {
+    "w1": "square",
+    "w2": "triangle",
+    "semi2": 12,
+    "det": 4,
+    "mix": 0.45,
+    "sub": 0,
+    "uni": 2,
+    "spread": 10,
+    "cut": 850,
+    "res": 4,
+    "env": 0.75,
+    "fatt": 0.001,
+    "fdec": 0.18,
+    "att": 0.002,
+    "dec": 0.35,
+    "sus": 0,
+    "rel": 0.3,
+    "gain": 0.55
+   },
+   "preset": "Glass Pluck"
+  }
+ ],
+ "patterns": [
+  {
+   "id": "1p5590qf",
+   "name": "Intro Hats",
+   "color": "#f2c14e",
+   "len": 16,
+   "notes": {
+    "8h1zhtta": [
+     {
+      "t": 2,
+      "len": 1,
+      "key": 60,
+      "vel": 0.85,
+      "chance": 1
+     },
+     {
+      "t": 6,
+      "len": 1,
+      "key": 60,
+      "vel": 0.85,
+      "chance": 1
+     },
+     {
+      "t": 10,
+      "len": 1,
+      "key": 60,
+      "vel": 0.85,
+      "chance": 1
+     },
+     {
+      "t": 14,
+      "len": 1,
+      "key": 60,
+      "vel": 0.85,
+      "chance": 1
+     },
+     {
+      "t": 1,
+      "len": 1,
+      "key": 60,
+      "vel": 0.3,
+      "chance": 0.55
+     },
+     {
+      "t": 3,
+      "len": 1,
+      "key": 60,
+      "vel": 0.3,
+      "chance": 0.55
+     },
+     {
+      "t": 5,
+      "len": 1,
+      "key": 60,
+      "vel": 0.3,
+      "chance": 0.55
+     },
+     {
+      "t": 7,
+      "len": 1,
+      "key": 60,
+      "vel": 0.3,
+      "chance": 0.55
+     },
+     {
+      "t": 9,
+      "len": 1,
+      "key": 60,
+      "vel": 0.3,
+      "chance": 0.55
+     },
+     {
+      "t": 11,
+      "len": 1,
+      "key": 60,
+      "vel": 0.3,
+      "chance": 0.55
+     },
+     {
+      "t": 13,
+      "len": 1,
+      "key": 60,
+      "vel": 0.3,
+      "chance": 0.55
+     },
+     {
+      "t": 15,
+      "len": 1,
+      "key": 60,
+      "vel": 0.3,
+      "chance": 0.55
+     }
+    ],
+    "sr5ce1qt": [
+     {
+      "t": 10,
+      "len": 1,
+      "key": 60,
+      "vel": 0.6,
+      "chance": 0.7
+     }
+    ]
+   }
+  },
+  {
+   "id": "d1knd4kg",
+   "name": "Beat A",
+   "color": "#3dd0ae",
+   "len": 16,
+   "notes": {
+    "15isoi2s": [
+     {
+      "t": 0,
+      "len": 1,
+      "key": 60,
+      "vel": 0.95,
+      "chance": 1
+     },
+     {
+      "t": 4,
+      "len": 1,
+      "key": 60,
+      "vel": 0.95,
+      "chance": 1
+     },
+     {
+      "t": 8,
+      "len": 1,
+      "key": 60,
+      "vel": 0.95,
+      "chance": 1
+     },
+     {
+      "t": 12,
+      "len": 1,
+      "key": 60,
+      "vel": 0.95,
+      "chance": 1
+     }
+    ],
+    "rxvb1znb": [
+     {
+      "t": 4,
+      "len": 1,
+      "key": 60,
+      "vel": 0.85,
+      "chance": 1
+     },
+     {
+      "t": 12,
+      "len": 1,
+      "key": 60,
+      "vel": 0.85,
+      "chance": 1
+     }
+    ],
+    "8h1zhtta": [
+     {
+      "t": 2,
+      "len": 1,
+      "key": 60,
+      "vel": 0.8,
+      "chance": 1
+     },
+     {
+      "t": 6,
+      "len": 1,
+      "key": 60,
+      "vel": 0.8,
+      "chance": 1
+     },
+     {
+      "t": 10,
+      "len": 1,
+      "key": 60,
+      "vel": 0.8,
+      "chance": 1
+     },
+     {
+      "t": 14,
+      "len": 1,
+      "key": 60,
+      "vel": 0.8,
+      "chance": 1
+     },
+     {
+      "t": 1,
+      "len": 1,
+      "key": 60,
+      "vel": 0.32,
+      "chance": 0.6
+     },
+     {
+      "t": 3,
+      "len": 1,
+      "key": 60,
+      "vel": 0.32,
+      "chance": 0.6
+     },
+     {
+      "t": 5,
+      "len": 1,
+      "key": 60,
+      "vel": 0.32,
+      "chance": 0.6
+     },
+     {
+      "t": 7,
+      "len": 1,
+      "key": 60,
+      "vel": 0.32,
+      "chance": 0.6
+     },
+     {
+      "t": 9,
+      "len": 1,
+      "key": 60,
+      "vel": 0.32,
+      "chance": 0.6
+     },
+     {
+      "t": 11,
+      "len": 1,
+      "key": 60,
+      "vel": 0.32,
+      "chance": 0.6
+     },
+     {
+      "t": 13,
+      "len": 1,
+      "key": 60,
+      "vel": 0.32,
+      "chance": 0.6
+     },
+     {
+      "t": 15,
+      "len": 1,
+      "key": 60,
+      "vel": 0.32,
+      "chance": 0.6
+     }
+    ],
+    "sr5ce1qt": [
+     {
+      "t": 11,
+      "len": 1,
+      "key": 60,
+      "vel": 0.5,
+      "chance": 0.5
+     }
+    ]
+   }
+  },
+  {
+   "id": "m6vj3lan",
+   "name": "Beat B",
+   "color": "#ee9663",
+   "len": 16,
+   "notes": {
+    "15isoi2s": [
+     {
+      "t": 0,
+      "len": 1,
+      "key": 60,
+      "vel": 0.95,
+      "chance": 1
+     },
+     {
+      "t": 4,
+      "len": 1,
+      "key": 60,
+      "vel": 0.95,
+      "chance": 1
+     },
+     {
+      "t": 8,
+      "len": 1,
+      "key": 60,
+      "vel": 0.95,
+      "chance": 1
+     },
+     {
+      "t": 12,
+      "len": 1,
+      "key": 60,
+      "vel": 0.95,
+      "chance": 1
+     },
+     {
+      "t": 14,
+      "len": 1,
+      "key": 60,
+      "vel": 0.5,
+      "chance": 0.45
+     }
+    ],
+    "rxvb1znb": [
+     {
+      "t": 4,
+      "len": 1,
+      "key": 60,
+      "vel": 0.85,
+      "chance": 1
+     },
+     {
+      "t": 12,
+      "len": 1,
+      "key": 60,
+      "vel": 0.85,
+      "chance": 1
+     }
+    ],
+    "2ytk44zv": [
+     {
+      "t": 12,
+      "len": 1,
+      "key": 60,
+      "vel": 0.4,
+      "chance": 1
+     }
+    ],
+    "lwiq53ue": [
+     {
+      "t": 2,
+      "len": 1,
+      "key": 60,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 6,
+      "len": 1,
+      "key": 60,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 10,
+      "len": 1,
+      "key": 60,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 14,
+      "len": 1,
+      "key": 60,
+      "vel": 0.72,
+      "chance": 1
+     }
+    ],
+    "8h1zhtta": [
+     {
+      "t": 0,
+      "len": 1,
+      "key": 60,
+      "vel": 0.5,
+      "chance": 1
+     },
+     {
+      "t": 4,
+      "len": 1,
+      "key": 60,
+      "vel": 0.5,
+      "chance": 1
+     },
+     {
+      "t": 8,
+      "len": 1,
+      "key": 60,
+      "vel": 0.5,
+      "chance": 1
+     },
+     {
+      "t": 12,
+      "len": 1,
+      "key": 60,
+      "vel": 0.5,
+      "chance": 1
+     },
+     {
+      "t": 1,
+      "len": 1,
+      "key": 60,
+      "vel": 0.34,
+      "chance": 0.7
+     },
+     {
+      "t": 3,
+      "len": 1,
+      "key": 60,
+      "vel": 0.34,
+      "chance": 0.7
+     },
+     {
+      "t": 5,
+      "len": 1,
+      "key": 60,
+      "vel": 0.34,
+      "chance": 0.7
+     },
+     {
+      "t": 7,
+      "len": 1,
+      "key": 60,
+      "vel": 0.34,
+      "chance": 0.7
+     },
+     {
+      "t": 9,
+      "len": 1,
+      "key": 60,
+      "vel": 0.34,
+      "chance": 0.7
+     },
+     {
+      "t": 11,
+      "len": 1,
+      "key": 60,
+      "vel": 0.34,
+      "chance": 0.7
+     },
+     {
+      "t": 13,
+      "len": 1,
+      "key": 60,
+      "vel": 0.34,
+      "chance": 0.7
+     },
+     {
+      "t": 15,
+      "len": 1,
+      "key": 60,
+      "vel": 0.34,
+      "chance": 0.7
+     }
+    ],
+    "sr5ce1qt": [
+     {
+      "t": 3,
+      "len": 1,
+      "key": 60,
+      "vel": 0.5,
+      "chance": 1
+     },
+     {
+      "t": 11,
+      "len": 1,
+      "key": 60,
+      "vel": 0.5,
+      "chance": 1
+     }
+    ]
+   }
+  },
+  {
+   "id": "4479lpfn",
+   "name": "Bassline",
+   "color": "#7ea6ff",
+   "len": 64,
+   "notes": {
+    "cc7hiery": [
+     {
+      "t": 2,
+      "len": 1.75,
+      "key": 33,
+      "vel": 0.9,
+      "chance": 1
+     },
+     {
+      "t": 6,
+      "len": 1.75,
+      "key": 33,
+      "vel": 0.8,
+      "chance": 1
+     },
+     {
+      "t": 10,
+      "len": 1.75,
+      "key": 33,
+      "vel": 0.8,
+      "chance": 1
+     },
+     {
+      "t": 14,
+      "len": 1.75,
+      "key": 33,
+      "vel": 0.8,
+      "chance": 1
+     },
+     {
+      "t": 18,
+      "len": 1.75,
+      "key": 29,
+      "vel": 0.9,
+      "chance": 1
+     },
+     {
+      "t": 22,
+      "len": 1.75,
+      "key": 29,
+      "vel": 0.8,
+      "chance": 1
+     },
+     {
+      "t": 26,
+      "len": 1.75,
+      "key": 29,
+      "vel": 0.8,
+      "chance": 1
+     },
+     {
+      "t": 30,
+      "len": 1.75,
+      "key": 29,
+      "vel": 0.8,
+      "chance": 1
+     },
+     {
+      "t": 31,
+      "len": 0.75,
+      "key": 41,
+      "vel": 0.55,
+      "chance": 1
+     },
+     {
+      "t": 34,
+      "len": 1.75,
+      "key": 36,
+      "vel": 0.9,
+      "chance": 1
+     },
+     {
+      "t": 38,
+      "len": 1.75,
+      "key": 36,
+      "vel": 0.8,
+      "chance": 1
+     },
+     {
+      "t": 42,
+      "len": 1.75,
+      "key": 36,
+      "vel": 0.8,
+      "chance": 1
+     },
+     {
+      "t": 46,
+      "len": 1.75,
+      "key": 36,
+      "vel": 0.8,
+      "chance": 1
+     },
+     {
+      "t": 50,
+      "len": 1.75,
+      "key": 31,
+      "vel": 0.9,
+      "chance": 1
+     },
+     {
+      "t": 54,
+      "len": 1.75,
+      "key": 31,
+      "vel": 0.8,
+      "chance": 1
+     },
+     {
+      "t": 58,
+      "len": 1.75,
+      "key": 31,
+      "vel": 0.8,
+      "chance": 1
+     },
+     {
+      "t": 62,
+      "len": 1.75,
+      "key": 31,
+      "vel": 0.8,
+      "chance": 1
+     },
+     {
+      "t": 63,
+      "len": 0.75,
+      "key": 43,
+      "vel": 0.55,
+      "chance": 1
+     }
+    ]
+   }
+  },
+  {
+   "id": "fzp8pgj9",
+   "name": "Chords",
+   "color": "#b9a0ff",
+   "len": 64,
+   "notes": {
+    "gzc76smu": [
+     {
+      "t": 0,
+      "len": 15.5,
+      "key": 57,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 0,
+      "len": 15.5,
+      "key": 60,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 0,
+      "len": 15.5,
+      "key": 64,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 16,
+      "len": 15.5,
+      "key": 57,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 16,
+      "len": 15.5,
+      "key": 60,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 16,
+      "len": 15.5,
+      "key": 65,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 32,
+      "len": 15.5,
+      "key": 55,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 32,
+      "len": 15.5,
+      "key": 60,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 32,
+      "len": 15.5,
+      "key": 64,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 48,
+      "len": 15.5,
+      "key": 55,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 48,
+      "len": 15.5,
+      "key": 59,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 48,
+      "len": 15.5,
+      "key": 62,
+      "vel": 0.72,
+      "chance": 1
+     }
+    ]
+   }
+  },
+  {
+   "id": "58re6ak9",
+   "name": "Pluck Lead",
+   "color": "#d987d4",
+   "len": 64,
+   "notes": {
+    "g06jp16j": [
+     {
+      "t": 0,
+      "len": 2,
+      "key": 69,
+      "vel": 0.92,
+      "chance": 1
+     },
+     {
+      "t": 3,
+      "len": 2,
+      "key": 72,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 6,
+      "len": 2,
+      "key": 76,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 8,
+      "len": 2,
+      "key": 74,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 10,
+      "len": 2,
+      "key": 72,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 12,
+      "len": 3,
+      "key": 76,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 16,
+      "len": 2,
+      "key": 69,
+      "vel": 0.92,
+      "chance": 1
+     },
+     {
+      "t": 19,
+      "len": 2,
+      "key": 72,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 22,
+      "len": 2,
+      "key": 77,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 24,
+      "len": 2,
+      "key": 76,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 26,
+      "len": 2,
+      "key": 72,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 28,
+      "len": 3,
+      "key": 69,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 32,
+      "len": 2,
+      "key": 67,
+      "vel": 0.92,
+      "chance": 1
+     },
+     {
+      "t": 35,
+      "len": 2,
+      "key": 72,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 38,
+      "len": 2,
+      "key": 76,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 40,
+      "len": 2,
+      "key": 79,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 42,
+      "len": 2,
+      "key": 76,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 44,
+      "len": 3,
+      "key": 74,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 48,
+      "len": 2,
+      "key": 71,
+      "vel": 0.92,
+      "chance": 1
+     },
+     {
+      "t": 51,
+      "len": 2,
+      "key": 74,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 54,
+      "len": 2,
+      "key": 79,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 56,
+      "len": 2,
+      "key": 77,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 58,
+      "len": 2,
+      "key": 74,
+      "vel": 0.72,
+      "chance": 1
+     },
+     {
+      "t": 60,
+      "len": 4,
+      "key": 71,
+      "vel": 0.72,
+      "chance": 1
+     }
+    ]
+   }
+  },
+  {
+   "id": "apo9rqc7",
+   "name": "Snare Roll",
+   "color": "#ff8090",
+   "len": 16,
+   "notes": {
+    "2ytk44zv": [
+     {
+      "t": 0,
+      "len": 1,
+      "key": 60,
+      "vel": 0.3,
+      "chance": 1
+     },
+     {
+      "t": 2,
+      "len": 1,
+      "key": 60,
+      "vel": 0.38666666666666666,
+      "chance": 1
+     },
+     {
+      "t": 4,
+      "len": 1,
+      "key": 60,
+      "vel": 0.47333333333333333,
+      "chance": 1
+     },
+     {
+      "t": 6,
+      "len": 1,
+      "key": 60,
+      "vel": 0.56,
+      "chance": 1
+     },
+     {
+      "t": 8,
+      "len": 1,
+      "key": 60,
+      "vel": 0.6466666666666667,
+      "chance": 1
+     },
+     {
+      "t": 9,
+      "len": 1,
+      "key": 60,
+      "vel": 0.69,
+      "chance": 1
+     },
+     {
+      "t": 10,
+      "len": 1,
+      "key": 60,
+      "vel": 0.7333333333333334,
+      "chance": 1
+     },
+     {
+      "t": 11,
+      "len": 1,
+      "key": 60,
+      "vel": 0.7766666666666666,
+      "chance": 1
+     },
+     {
+      "t": 12,
+      "len": 1,
+      "key": 60,
+      "vel": 0.8200000000000001,
+      "chance": 1
+     },
+     {
+      "t": 13,
+      "len": 1,
+      "key": 60,
+      "vel": 0.8633333333333333,
+      "chance": 1
+     },
+     {
+      "t": 14,
+      "len": 1,
+      "key": 60,
+      "vel": 0.9066666666666667,
+      "chance": 1
+     },
+     {
+      "t": 15,
+      "len": 1,
+      "key": 60,
+      "vel": 0.95,
+      "chance": 1
+     }
+    ],
+    "15isoi2s": [
+     {
+      "t": 0,
+      "len": 1,
+      "key": 60,
+      "vel": 0.9,
+      "chance": 1
+     },
+     {
+      "t": 4,
+      "len": 1,
+      "key": 60,
+      "vel": 0.9,
+      "chance": 1
+     },
+     {
+      "t": 8,
+      "len": 1,
+      "key": 60,
+      "vel": 0.9,
+      "chance": 1
+     }
+    ]
+   }
+  }
+ ],
+ "playlist": {
+  "tracks": 16,
+  "names": [
+   "Drums",
+   "Fills",
+   "Bass",
+   "Chords",
+   "Lead"
+  ],
+  "mute": [],
+  "clips": [
+   {
+    "id": "5f6eyk45",
+    "pat": "1p5590qf",
+    "track": 0,
+    "start": 0,
+    "len": 64
+   },
+   {
+    "id": "iiqnz4sx",
+    "pat": "d1knd4kg",
+    "track": 0,
+    "start": 64,
+    "len": 64
+   },
+   {
+    "id": "m3buzzee",
+    "pat": "m6vj3lan",
+    "track": 0,
+    "start": 128,
+    "len": 128
+   },
+   {
+    "id": "vh6nrcs2",
+    "pat": "d1knd4kg",
+    "track": 0,
+    "start": 256,
+    "len": 64
+   },
+   {
+    "id": "j1s86n6o",
+    "pat": "apo9rqc7",
+    "track": 1,
+    "start": 112,
+    "len": 16
+   },
+   {
+    "id": "t7jfzfd1",
+    "pat": "apo9rqc7",
+    "track": 1,
+    "start": 240,
+    "len": 16
+   },
+   {
+    "id": "0eqzm8xi",
+    "pat": "4479lpfn",
+    "track": 2,
+    "start": 64,
+    "len": 64
+   },
+   {
+    "id": "pgn56dah",
+    "pat": "4479lpfn",
+    "track": 2,
+    "start": 128,
+    "len": 64
+   },
+   {
+    "id": "9j0xeg3v",
+    "pat": "4479lpfn",
+    "track": 2,
+    "start": 192,
+    "len": 64
+   },
+   {
+    "id": "aep6nmv2",
+    "pat": "fzp8pgj9",
+    "track": 3,
+    "start": 0,
+    "len": 64
+   },
+   {
+    "id": "q8zx9qgz",
+    "pat": "fzp8pgj9",
+    "track": 3,
+    "start": 64,
+    "len": 64
+   },
+   {
+    "id": "kkxgij97",
+    "pat": "fzp8pgj9",
+    "track": 3,
+    "start": 128,
+    "len": 64
+   },
+   {
+    "id": "104ln9r4",
+    "pat": "fzp8pgj9",
+    "track": 3,
+    "start": 192,
+    "len": 64
+   },
+   {
+    "id": "f4sjql5j",
+    "pat": "fzp8pgj9",
+    "track": 3,
+    "start": 256,
+    "len": 64
+   },
+   {
+    "id": "th5jv7nj",
+    "pat": "58re6ak9",
+    "track": 4,
+    "start": 128,
+    "len": 64
+   },
+   {
+    "id": "urxarebh",
+    "pat": "58re6ak9",
+    "track": 4,
+    "start": 192,
+    "len": 64
+   }
+  ],
+  "loop": null
+ },
+ "mixer": [
+  {
+   "name": "Master",
+   "vol": 0.7906,
+   "pan": 0,
+   "mute": false,
+   "solo": false,
+   "fx": [
+    {
+     "id": "sfn5fv16",
+     "type": "eq",
+     "on": true,
+     "p": {
+      "low": 1,
+      "mid": 0,
+      "midf": 1200,
+      "high": 1.5
+     }
+    },
+    {
+     "id": "4tlpa37c",
+     "type": "comp",
+     "on": true,
+     "p": {
+      "thr": -12,
+      "ratio": 2,
+      "att": 0.02,
+      "rel": 0.25,
+      "gain": 2
+     }
+    }
+   ]
+  },
+  {
+   "name": "Kick",
+   "vol": 0.7906,
+   "pan": 0,
+   "mute": false,
+   "solo": false,
+   "fx": [
+    {
+     "id": "vox5x9nc",
+     "type": "eq",
+     "on": true,
+     "p": {
+      "low": 2.5,
+      "mid": -2,
+      "midf": 400,
+      "high": 0
+     }
+    },
+    {
+     "id": "m15wv5oi",
+     "type": "comp",
+     "on": true,
+     "p": {
+      "thr": -14,
+      "ratio": 4,
+      "att": 0.012,
+      "rel": 0.15,
+      "gain": 2
+     }
+    }
+   ]
+  },
+  {
+   "name": "Clap + Snare",
+   "vol": 0.7906,
+   "pan": 0,
+   "mute": false,
+   "solo": false,
+   "fx": [
+    {
+     "id": "k7r8twob",
+     "type": "eq",
+     "on": true,
+     "p": {
+      "low": -8,
+      "mid": 0,
+      "midf": 1200,
+      "high": 2
+     }
+    },
+    {
+     "id": "8iacdirx",
+     "type": "reverb",
+     "on": true,
+     "p": {
+      "size": 1.3,
+      "pre": 0.015,
+      "tone": 6500,
+      "mix": 0.2
+     }
+    }
+   ]
+  },
+  {
+   "name": "Hats",
+   "vol": 0.74,
+   "pan": 0,
+   "mute": false,
+   "solo": false,
+   "fx": [
+    {
+     "id": "czh0i66v",
+     "type": "eq",
+     "on": true,
+     "p": {
+      "low": -12,
+      "mid": 0,
+      "midf": 1200,
+      "high": 1.5
+     }
+    },
+    {
+     "id": "s6hkmyr8",
+     "type": "delay",
+     "on": true,
+     "p": {
+      "time": 2,
+      "fb": 0.22,
+      "tone": 6000,
+      "mix": 0.12
+     }
+    }
+   ]
+  },
+  {
+   "name": "Bass",
+   "vol": 0.7906,
+   "pan": 0,
+   "mute": false,
+   "solo": false,
+   "fx": [
+    {
+     "id": "q0jmt5q3",
+     "type": "pump",
+     "on": true,
+     "p": {
+      "rate": 0,
+      "depth": 0.55,
+      "rel": 0.6
+     }
+    },
+    {
+     "id": "tqyxsmvu",
+     "type": "drive",
+     "on": true,
+     "p": {
+      "drive": 2.5,
+      "tone": 4500,
+      "mix": 0.35,
+      "out": 0
+     }
+    },
+    {
+     "id": "oh1rlwxg",
+     "type": "eq",
+     "on": true,
+     "p": {
+      "low": 1.5,
+      "mid": 0,
+      "midf": 1200,
+      "high": -3
+     }
+    }
+   ]
+  },
+  {
+   "name": "Pad",
+   "vol": 0.74,
+   "pan": 0,
+   "mute": false,
+   "solo": false,
+   "fx": [
+    {
+     "id": "ierulejr",
+     "type": "pump",
+     "on": true,
+     "p": {
+      "rate": 0,
+      "depth": 0.65,
+      "rel": 0.7
+     }
+    },
+    {
+     "id": "xk9b3ij9",
+     "type": "filter",
+     "on": true,
+     "p": {
+      "mode": 1,
+      "cut": 220,
+      "res": 0.7,
+      "rate": 0.4,
+      "lfo": 0
+     }
+    },
+    {
+     "id": "rx4hyb9d",
+     "type": "chorus",
+     "on": true,
+     "p": {
+      "rate": 0.35,
+      "depth": 0.5,
+      "mix": 0.45
+     }
+    },
+    {
+     "id": "zcmieba2",
+     "type": "reverb",
+     "on": true,
+     "p": {
+      "size": 3.6,
+      "pre": 0.02,
+      "tone": 6500,
+      "mix": 0.32
+     }
+    }
+   ]
+  },
+  {
+   "name": "Lead",
+   "vol": 0.7906,
+   "pan": 0,
+   "mute": false,
+   "solo": false,
+   "fx": [
+    {
+     "id": "v5g6120d",
+     "type": "delay",
+     "on": true,
+     "p": {
+      "time": 2,
+      "fb": 0.4,
+      "tone": 3800,
+      "mix": 0.26
+     }
+    },
+    {
+     "id": "orcq18rm",
+     "type": "reverb",
+     "on": true,
+     "p": {
+      "size": 2.6,
+      "pre": 0.02,
+      "tone": 6500,
+      "mix": 0.22
+     }
+    }
+   ]
+  },
+  {
+   "name": "Insert 7",
+   "vol": 0.7906,
+   "pan": 0,
+   "mute": false,
+   "solo": false,
+   "fx": []
+  },
+  {
+   "name": "Insert 8",
+   "vol": 0.7906,
+   "pan": 0,
+   "mute": false,
+   "solo": false,
+   "fx": []
+  },
+  {
+   "name": "Insert 9",
+   "vol": 0.7906,
+   "pan": 0,
+   "mute": false,
+   "solo": false,
+   "fx": []
+  },
+  {
+   "name": "Insert 10",
+   "vol": 0.7906,
+   "pan": 0,
+   "mute": false,
+   "solo": false,
+   "fx": []
+  }
+ ],
+ "ui": {
+  "pat": "m6vj3lan",
+  "mode": "song",
+  "metro": false,
+  "ch": "15isoi2s"
+ }
+}

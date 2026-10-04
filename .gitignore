@@ -1,0 +1,8 @@
+build/
+build-*/
+dist/
+web/dist/
+installer/windows/MicrosoftEdgeWebview2Setup.exe
+__pycache__/
+*.pyc
+.DS_Store
