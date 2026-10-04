@@ -2,7 +2,7 @@
 # Runs the interface test (tests/ui_test.js) inside the desktop app on a virtual display.
 #   scripts/ui-test.sh "<path to NXW Studio>" <folder with the built test plugins>
 set -euo pipefail
-APP="$1"; PLUGINS="$2"
+APP="$(realpath "$1")"; PLUGINS="$(realpath "$2")"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LOG="$HOME/.config/NXW Studio/Logs/nxw.log"
 
