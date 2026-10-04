@@ -12,6 +12,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <map>
 #include "../engine/Instruments.h"
 #include "../engine/Effects.h"
 #include <atomic>
@@ -114,11 +115,18 @@ public:
     juce::StringArray getExtraFolders() const { return extraFolders; }
     void setExtraFolders (const juce::StringArray& f);
 
-    /** Plugin windows. */
-    void showEditor (const juce::String& ownerId, juce::AudioProcessor&, const juce::String& title, juce::Component* owner);
+    /** Plugin windows: separate, movable windows that stay above the studio window.
+        With `toggle`, a visible window is hidden instead. Returns true if the window is now showing. */
+    bool showEditor (const juce::String& ownerId, juce::AudioProcessor&, const juce::String& title,
+                     juce::Component* owner, bool toggle = false);
+    void hideEditorFor (const juce::String& ownerId);
     void closeEditorFor (juce::AudioProcessor*);
     void closeAllEditors();
     bool hasEditorFor (const juce::String& ownerId) const;
+
+    /** Keys pressed in a plugin window that belong to the studio (Space, the typing keyboard):
+        action is "toggle", "down" or "up"; code is a web key code such as "KeyZ". */
+    std::function<void (const juce::String& action, const juce::String& code)> onKey;
 
     /** Entry point of the scanning child process. Returns the process exit code. */
     static int runScanChild (const juce::String& pluginFile, const juce::File& resultFile);
@@ -134,6 +142,10 @@ private:
     juce::StringArray extraFolders;
     std::unique_ptr<ScanThread> scanner;
     juce::OwnedArray<PluginWindow> windows;
+    std::map<juce::String, juce::Point<int>> windowPositions;     // where each plugin's window was last
 };
+
+/** Makes a top-level window stay above (and minimise with) the studio window; no-op where unsupported. */
+void setOwnerWindow (juce::Component& window, juce::Component* owner);
 
 } // namespace nxw

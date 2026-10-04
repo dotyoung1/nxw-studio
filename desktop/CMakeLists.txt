@@ -92,6 +92,11 @@ target_sources(NXWStudio PRIVATE
     Source/engine/Effects.cpp
     Source/engine/Engine.cpp
     Source/plugins/PluginHost.cpp)
+if(APPLE)
+    target_sources(NXWStudio PRIVATE Source/plugins/NativeWindow.mm)
+else()
+    target_sources(NXWStudio PRIVATE Source/plugins/NativeWindow.cpp)
+endif()
 
 target_include_directories(NXWStudio PRIVATE Source)
 

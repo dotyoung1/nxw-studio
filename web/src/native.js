@@ -95,6 +95,7 @@ NATIVE.onEvent = ev => {
     case 'scan': NATIVE.onScan(ev); break;
     case 'export': if (NATIVE.exportProgress) NATIVE.exportProgress(ev.progress); break;
     case 'update': NATIVE.onUpdate(ev.info); break;
+    case 'hostKey': NATIVE.onHostKey(ev); break;
   }
 };
 
@@ -182,8 +183,9 @@ NATIVE.pluginRef = p => ({ id: p.id, name: p.name, vendor: p.vendor || '', forma
 NATIVE.addPluginChannel = id => {
   const p = NATIVE.plugins.find(x => x.id === id);
   if (!p) return null;
-  const ch = addChannel({ type: 'plugin', name: p.name, plugin: NATIVE.pluginRef(p) });
-  setTimeout(() => NATIVE.openPlugin(ch.id), 500);
+  hint('Loading ' + p.name + '…');
+  const ch = addChannel({ type: 'plugin', name: p.name, plugin: NATIVE.pluginRef(p) }, true);
+  setTimeout(() => NATIVE.openPlugin(ch.id).then(r => { if (r && r.ok) hint(p.name + ' · click its name in the channel rack to show or hide its window'); }), 60);
   return ch;
 };
 NATIVE.addPluginFx = (id, insert) => {
@@ -195,15 +197,25 @@ NATIVE.addPluginFx = (id, insert) => {
   edit(() => { m.fx.push(f); S.mixSel = i; S.fxSel = m.fx.length - 1; });
   WM.show('mixer');
   toast(p.name + ' added to ' + (i ? 'insert ' + i : 'the master'));
-  setTimeout(() => NATIVE.openPlugin(f.id), 500);
+  setTimeout(() => NATIVE.openPlugin(f.id), 60);
 };
-NATIVE.openPlugin = async ownerId => {
+/** Shows a plugin's window; with toggle, a window that is already showing is hidden (like FL Studio's channel buttons). */
+NATIVE.openPlugin = async (ownerId, toggle = false) => {
   const ch = chById(ownerId);
-  let title = ch ? ch.name : '';
+  let title = ch ? (ch.plugin && ch.plugin.name && ch.plugin.name !== ch.name ? ch.name + ' (' + ch.plugin.name + ')' : ch.name) : '';
   if (!ch) for (const [i, m] of P.mixer.entries()) { const f = m.fx.find(x => x.id === ownerId); if (f) title = f.plugin.name + ' · ' + (i ? m.name : 'Master'); }
   await NATIVE.pushNow();
-  const ok = await NATIVE.call('openPlugin', ownerId, title);
-  if (!ok) toast(NATIVE.status[ownerId] && NATIVE.status[ownerId] !== 'loaded' ? NATIVE.status[ownerId] : 'The plugin window could not be opened');
+  const r = await NATIVE.call('openPlugin', ownerId, title, !!toggle);
+  if (!r || !r.ok) toast(NATIVE.status[ownerId] && NATIVE.status[ownerId] !== 'loaded' ? NATIVE.status[ownerId] : 'The plugin window could not be opened');
+  return r;
+};
+/** Keys pressed while a plugin window has focus. */
+NATIVE.onHostKey = ev => {
+  if (ev.action === 'toggle') { togglePlay(); return; }
+  const off = QWERTY[ev.code];
+  if (off == null || !S.typing) return;
+  const key = (S.oct + 1) * 12 + off;
+  if (ev.action === 'down') noteOn(key, 0.8); else noteOff(key);
 };
 NATIVE.foldersDialog = async () => {
   const list = h('div', { class: 'xp-opts' });

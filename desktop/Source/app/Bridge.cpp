@@ -142,12 +142,18 @@ Bridge::Bridge (Services& s, juce::Component& c) : sv (s), content (c)
             if (auto* b = weak.get()) b->emit (obj ({ { "type", "pluginStatus" }, { "id", owner }, { "status", st } }));
         });
     };
+    sv.host.onKey = [weak] (const juce::String& action, const juce::String& code)
+    {
+        if (auto* b = weak.get()) b->emit (obj ({ { "type", "hostKey" }, { "action", action }, { "code", code } }));
+    };
     startTimerHz (30);
 }
 
 Bridge::~Bridge()
 {
     stopTimer();
+    sv.host.onKey = nullptr;
+    sv.host.closeAllEditors();      // before the studio window (their owner) goes away
     if (cancelFlag) *cancelFlag = true;
     for (int i = 0; i < 300 && sv.engine.exporting.load(); ++i) juce::Thread::sleep (10);
     decodePool.removeAllJobs (true, 2000);
@@ -459,11 +465,12 @@ void Bridge::handle (const juce::Array<juce::var>& args, Completion done)
     {
         if (auto* p = eng.findPlugin (arg (0).toString()))
         {
-            sv.host.showEditor (arg (0).toString(), *p, arg (1).toString().isNotEmpty() ? arg (1).toString() : p->getName(),
-                                content.getTopLevelComponent());
-            done (true);
+            const bool open = sv.host.showEditor (arg (0).toString(), *p,
+                                                  arg (1).toString().isNotEmpty() ? arg (1).toString() : p->getName(),
+                                                  content.getTopLevelComponent(), (bool) arg (2));
+            done (obj ({ { "ok", true }, { "open", open } }));
         }
-        else done (false);
+        else done (obj ({ { "ok", false } }));
         return;
     }
 

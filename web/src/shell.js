@@ -147,12 +147,53 @@ function deletePatternAction() {
   if (P.patterns.length < 2) { toast('A project needs at least one pattern'); return; }
   edit(() => { const src = curPat(), i = P.patterns.indexOf(src); P.patterns.splice(i, 1); P.playlist.clips = P.playlist.clips.filter(c => c.pat !== src.id); S.pat = P.patterns[Math.max(0, i - 1)].id; });
 }
+/* Split by channel (as in FL Studio): one new pattern per channel that plays in the pattern.
+   Its clips in the playlist are replaced by one clip per channel, stacked on the tracks below
+   (skipping tracks that already have something at that time). The original pattern stays in
+   the pattern list, so nothing is lost; Ctrl+Z undoes the whole split. */
+function splitByChannel(patId, onlyClips) {
+  const pat = patById(patId); if (!pat) return;
+  const used = P.channels.filter(ch => (pat.notes[ch.id] || []).length);
+  if (used.length < 2) { toast(used.length ? pat.name + ' only uses one channel, so there is nothing to split' : pat.name + ' is empty'); return; }
+  const pl = P.playlist;
+  const clips = pl.clips.filter(c => c.pat === pat.id && (!onlyClips || onlyClips.includes(c)));
+  let made = [];
+  edit(() => {
+    made = used.map(ch => ({ id: uid(), name: pat.name + ' - ' + ch.name, color: ch.color || pat.color, len: pat.len, notes: { [ch.id]: JSON.parse(JSON.stringify(pat.notes[ch.id])) } }));
+    P.patterns.splice(P.patterns.indexOf(pat) + 1, 0, ...made);
+    const keep = pl.clips.filter(c => !clips.includes(c)), out = [];
+    const busy = (t, a, b) => keep.concat(out).some(o => o.track === t && o.start < b && o.start + o.len > a);
+    for (const c of clips) {
+      let t = c.track;
+      made.forEach((np, i) => {
+        if (i) t++;
+        while (t < 498 && busy(t, c.start, c.start + c.len)) t++;
+        out.push({ id: uid(), pat: np.id, track: t, start: c.start, len: c.len });
+      });
+    }
+    pl.clips = keep.concat(out);
+    const need = out.reduce((m, c) => Math.max(m, c.track + 1), 0);
+    if (need > pl.tracks) pl.tracks = need;
+    if (UI.pl) UI.pl.sel = new Set(out);
+    S.pat = made[0].id;
+  });
+  toast('Split ' + pat.name + ' into ' + made.length + ' patterns, one per channel' + (clips.length ? '' : ' (they are in the pattern list)'));
+}
+function makeUniqueClip(clip) {
+  const src = patById(clip.pat); if (!src) return;
+  edit(() => {
+    const p = JSON.parse(JSON.stringify(src)); p.id = uid(); p.name = src.name + ' (unique)';
+    P.patterns.splice(P.patterns.indexOf(src) + 1, 0, p); clip.pat = p.id; S.pat = p.id;
+  });
+  hint('This clip now has its own copy of the pattern');
+}
 function patternMenu(anchor) {
   const items = [{ head: 'Patterns' }];
   for (const p of P.patterns) items.push({ label: p.name, swatch: p.color, key: p.id === S.pat ? 'current' : (p.len / STEP) + (p.len === STEP ? ' bar' : ' bars'), action: () => selectPattern(p.id) });
   items.push({ sep: true },
     { label: 'New pattern', action: newPatternAction },
     { label: 'Clone pattern', action: clonePatternAction },
+    { label: 'Split by channel', hint: 'One pattern per channel, stacked in the playlist', action: () => splitByChannel(S.pat) },
     { label: 'Rename pattern', action: () => askText(anchor, curPat().name, v => edit(() => { curPat().name = v; })) },
     { label: 'Colour', disabled: true },
     ...PALETTE.slice(0, 5).map(c => ({ label: '', swatch: c, action: () => edit(() => { curPat().color = c; }) })),
@@ -257,6 +298,7 @@ function shortcutsAction() {
     ['Z S X D C … M ,', 'Play notes, lower octave'], ['Q 2 W 3 E … P', 'Play notes, upper octave'], ['[ · ]', 'Typing keyboard octave down · up'],
     ['Piano roll: click · drag', 'Add note · move it; drag the right edge to resize'], ['Right-click (or eraser)', 'Delete notes, clips and steps'],
     ['Alt+click a lit step', 'Cycle its repeat: 2, 3, 4, 6 or 8 hits'], ['Right-click a channel', 'Cut itself, choke groups, fill, rotate'],
+    ['Arrow at the top-left of a playlist clip', 'Clip menu: split by channel, make unique, rename'],
     ['Ctrl+drag', 'Select a group of notes or clips'], ['Shift+drag a clip or note', 'Duplicate it while moving'],
     ['Delete · Ctrl+A · Ctrl+D', 'Delete selection · select all · duplicate selection'], ['↑ ↓ (Shift = octave)', 'Transpose selected notes'],
     ['Ctrl+scroll · Alt+scroll', 'Zoom time · zoom keys'], ['Knobs and faders', 'Drag, scroll or use arrow keys; Shift for fine; double-click to reset'],

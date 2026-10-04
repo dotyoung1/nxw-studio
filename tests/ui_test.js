@@ -91,8 +91,12 @@
     await check(true, 'project saved to ' + NATIVE.projectPath);
 
     // Plugin window
-    const opened = await NATIVE.call('openPlugin', ch.id, 'Test window');
-    await check(opened === true, 'plugin window opens');
+    let win = await NATIVE.openPlugin(ch.id, true);
+    await check(win && win.ok && win.open, 'plugin window opens');
+    win = await NATIVE.openPlugin(ch.id, true);
+    await check(win && win.ok && !win.open, 'clicking the channel again hides the plugin window');
+    win = await NATIVE.openPlugin(ch.id, true);
+    await check(win && win.ok && win.open, 'and shows it again');
     await sleep(800);
   } catch (e) {
     failed++;

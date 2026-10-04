@@ -77,13 +77,36 @@ UI.pl = {
     const { x, y } = this.local(e); let cur = 'default';
     if (y < this.RH && x > this.HW) cur = 'col-resize';
     else if (x < this.HW) cur = 'pointer';
-    else { const hh = this.hit(x, y); cur = hh ? (hh.edge ? 'ew-resize' : 'grab') : (S.plTool === 'erase' ? 'not-allowed' : S.plTool === 'select' ? 'crosshair' : 'copy'); }
+    else { const hh = this.hit(x, y); cur = hh ? (this.onMenuIcon(hh.c, x, y) ? 'pointer' : hh.edge ? 'ew-resize' : 'grab') : (S.plTool === 'erase' ? 'not-allowed' : S.plTool === 'select' ? 'crosshair' : 'copy'); }
     if (this.cv.style.cursor !== cur) this.cv.style.cursor = cur;
   },
   dbl(e) {
     const { x, y } = this.local(e);
     if (x < this.HW && y > this.RH) { const tr = this.trackAt(y); if (tr >= 0 && x > 30) this.renameTrack(tr, e.clientY); return; }
     const hh = this.hit(x, y); if (hh) { selectPattern(hh.c.pat); WM.show('rack'); }
+  },
+  // The small arrow at the top-left of a clip opens its menu (like FL Studio's clip menu).
+  onMenuIcon(c, x, y) {
+    const ix = Math.max(this.xOf(c.start), this.HW), iy = this.yOf(c.track) + 2;
+    return c.len * S.plZoom > 18 && x >= ix && x < ix + 16 && y >= iy && y < iy + 14;
+  },
+  clipMenu(c, cx, cy) {
+    const pat = patById(c.pat); if (!pat) return;
+    const nUsed = P.channels.filter(ch => (pat.notes[ch.id] || []).length).length;
+    const group = this.sel.has(c) ? [...this.sel].filter(o => o.pat === c.pat) : [c];
+    const anchor = { getBoundingClientRect: () => ({ left: cx, top: cy, width: 180, height: 26, right: cx + 180, bottom: cy + 26 }) };
+    openMenu(cx, cy, [
+      { head: pat.name },
+      { label: 'Split by channel', disabled: nUsed < 2, hint: nUsed < 2 ? 'This pattern only uses one channel' : 'One pattern per channel (' + nUsed + '), stacked on the tracks below' + (group.length > 1 ? ' · applies to the ' + group.length + ' selected clips' : ''), action: () => splitByChannel(c.pat, group) },
+      { label: 'Make unique', hint: 'Give this clip its own copy of the pattern to edit separately', action: () => makeUniqueClip(c) },
+      { sep: true },
+      { label: 'Open in channel rack', key: 'F6', action: () => { selectPattern(c.pat); WM.show('rack'); } },
+      { label: 'Open in piano roll', key: 'F7', action: () => { selectPattern(c.pat); WM.show('pr'); } },
+      { label: 'Rename pattern…', action: () => askText(anchor, pat.name, v => edit(() => { pat.name = v; })) },
+      { label: 'Select all clips of this pattern', action: () => { this.sel = new Set(P.playlist.clips.filter(o => o.pat === c.pat)); this.dirty = true; } },
+      { sep: true },
+      { label: 'Delete clip', danger: true, action: () => edit(() => { P.playlist.clips = P.playlist.clips.filter(o => o !== c); this.sel.delete(c); }) },
+    ]);
   },
   renameTrack(tr, cy) {
     const r = this.cv.getBoundingClientRect(), fake = { getBoundingClientRect: () => ({ left: r.left + 28, top: r.top + this.yOf(tr) + 6, width: this.HW - 34, height: 28 }) };
@@ -128,6 +151,7 @@ UI.pl = {
     let tool = S.plTool;
     if (e.button === 2) tool = 'erase'; else if (e.ctrlKey || e.metaKey) tool = 'select';
     const h0 = this.hit(x, y);
+    if (h0 && e.button === 0 && !e.shiftKey && !(e.ctrlKey || e.metaKey) && this.onMenuIcon(h0.c, x, y)) { finish(); this.clipMenu(h0.c, e.clientX, e.clientY); return; }
     if (tool === 'erase') {
       Hist.push();
       const er = (xx, yy) => { const hh = this.hit(xx, yy); if (hh) { pl.clips.splice(pl.clips.indexOf(hh.c), 1); this.sel.delete(hh.c); VER++; this.dirty = true; } };
@@ -300,7 +324,9 @@ UI.pl = {
       rrect(ctx, x + 0.5, y, w - 1, hh, 4); ctx.fillStyle = hexA(col, 0.2); ctx.fill();
       ctx.save(); rrect(ctx, x + 0.5, y, w - 1, hh, 4); ctx.clip();
       ctx.fillStyle = hexA(col, 0.92); ctx.fillRect(x, y, w, 14);
-      ctx.fillStyle = 'rgba(10,12,14,0.85)'; ctx.fillText(pat.name, Math.max(x, HW) + 5, y + 7.5);
+      ctx.fillStyle = 'rgba(10,12,14,0.85)';
+      if (w > 18) { const ix = Math.max(x, HW) + 4; ctx.beginPath(); ctx.moveTo(ix, y + 5); ctx.lineTo(ix + 7, y + 5); ctx.lineTo(ix + 3.5, y + 9.5); ctx.closePath(); ctx.fill(); }
+      ctx.fillText(pat.name, Math.max(x, HW) + (w > 18 ? 15 : 5), y + 7.5);
       const pv = this.preview(pat), bodyY = y + 17, bodyH = hh - 20, nl = pv.lanes.length;
       if (nl && pat.len) {
         const laneH = bodyH / nl;

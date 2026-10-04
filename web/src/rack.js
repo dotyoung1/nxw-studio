@@ -197,13 +197,13 @@ UI.rack = {
       onStart: () => Hist.push(), onChange: v => { ch.pan = v; syncChannel(ch); }, onEnd: touched });
     const vol = Knob({ def: { label: 'Volume', min: 0, max: 1, def: 0.78, unit: 'vol' }, name: ch.name + ' volume', value: ch.vol, size: 24,
       onStart: () => Hist.push(), onChange: v => { ch.vol = v; syncChannel(ch); }, onEnd: touched });
-    const name = h('button', { class: 'chname', 'data-hint': ch.name + ' · click for instrument settings, right-click for Cut itself and more' + (ch.cut ? ' · cuts itself' : '') + (ch.cutGroup ? ' · choke group ' + ch.cutGroup : '') },
+    const name = h('button', { class: 'chname', 'data-hint': ch.name + ' · click for instrument settings (plugins: show or hide the plugin window), right-click for Cut itself and more' + (ch.cut ? ' · cuts itself' : '') + (ch.cutGroup ? ' · choke group ' + ch.cutGroup : '') },
       h('span', { class: 'nm' }, ch.name),
       ch.cut || ch.cutGroup ? h('span', { class: 'cutb', 'aria-label': (ch.cut ? 'Cuts itself' : '') + (ch.cutGroup ? ' choke group ' + ch.cutGroup : ''), html: icon('scissors', 11) + (ch.cutGroup ? '<b>' + ch.cutGroup + '</b>' : '') }) : null,
       ch.type === 'sampler' && ch.sample && !A.samples.has(ch.sample) ? h('span', { class: 'cutb', 'data-hint': 'Sound loading or missing' }, '…') : null,
       ch.type === 'plugin' && (!NATIVE.on || (NATIVE.status[ch.id] && NATIVE.status[ch.id] !== 'loaded')) ? h('span', { class: 'cutb', 'data-hint': NATIVE.on ? NATIVE.status[ch.id] : 'VST3 plugins play in the desktop app' }, '!') : null,
       h('i', { class: 'hit' }));
-    name.onclick = () => { S.ch = ch.id; if (ch.type === 'plugin' && NATIVE.on) NATIVE.openPlugin(ch.id); else WM.show('inst'); renderAll(); };
+    name.onclick = () => { S.ch = ch.id; if (ch.type === 'plugin' && NATIVE.on) NATIVE.openPlugin(ch.id, true); else WM.show('inst'); renderAll(); };
     name.oncontextmenu = e => { e.preventDefault(); this.chMenu(ch, e.clientX, e.clientY, name); };
     const prb = h('button', { class: 'prbtn', html: icon('roll', 15), 'aria-label': 'Open ' + ch.name + ' in the piano roll', 'data-hint': 'Open in the piano roll', onclick: () => { S.ch = ch.id; WM.show('pr'); renderAll(); } });
     const selm = h('div', { class: 'selmark', role: 'button', 'aria-label': 'Select ' + ch.name, 'data-hint': 'Select channel · it receives typing-keyboard notes', onclick: () => { S.ch = ch.id; renderAll(); } });

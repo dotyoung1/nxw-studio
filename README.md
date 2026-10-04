@@ -31,11 +31,19 @@ On first launch the app scans the standard VST3 folder (`C:\Program Files\Common
 on Windows, `/Library/Audio/Plug-Ins/VST3` and `~/Library/Audio/Plug-Ins/VST3` on macOS).
 Plugins appear in the browser under **Plugin database → VST3 instruments / VST3 effects**.
 
-- Click an instrument to add it as a channel; click its name in the channel rack to open its window.
-- Add an effect from the browser, or from an empty mixer slot.
+- Click an instrument to add it as a channel. Click its name in the channel rack to show or
+  hide its window; the window's close button also just hides it.
+- Plugin windows are separate windows: move them anywhere (another monitor too), resize the
+  ones that allow it, and they stay above the studio window. Each reopens where you left it.
+  While a plugin window has focus, Space still plays/stops and the typing keyboard still plays
+  notes (unless the plugin uses those keys itself).
+- Add an effect from the browser, or from an empty mixer slot; double-click the slot to show its window.
 - Other folders: **Plugin database → Plugin folders…** (or **File → Plugin folders…**), then scan.
-- Each plugin is checked in a separate process, so a plugin that crashes during the scan is
-  skipped instead of taking the studio down. **File → Rescan all plugins** retries skipped ones.
+- Scanning is quick: plugins that describe themselves (most VST3 plugins from the last few years)
+  are listed without being loaded, and the rest are checked several at a time in separate
+  processes, so a plugin that crashes or hangs is skipped instead of taking the studio down.
+  Later scans only look at new or updated plugins; **File → Rescan all plugins** checks everything
+  again, including plugins that were skipped.
 - Plugin settings are saved inside project files and in the autosave.
 
 VST2 plugins are not supported (Steinberg no longer licenses the VST2 SDK).
