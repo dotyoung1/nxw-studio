@@ -113,9 +113,11 @@ and tone per mixer track; they match within about 1 dB.
 
 ## Releasing an update
 
-1. Change the number in `VERSION` (for example `0.3.0`) and commit.
-2. Tag and push: `git tag v0.3.0 && git push origin v0.3.0`
-3. The workflow builds Windows (and macOS) and publishes a GitHub release with the installer.
+1. Change the number in `VERSION` (for example `0.3.0`), commit and push.
+2. On GitHub: **Actions → Build → Run workflow**, tick **Publish a release**, run it.
+   (Pushing a tag such as `v0.3.0` does the same.)
+3. The workflow builds Windows and macOS, runs the tests and publishes a release named
+   *NXW Studio 0.3.0* with the installer, the portable zip and the macOS app.
 
 Installed copies check the latest release a few seconds after starting and offer the download;
 **Help → Check for updates** does the same on demand. Installing a new version over an old one
