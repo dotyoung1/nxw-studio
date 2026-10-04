@@ -32,6 +32,10 @@ for _ in $(seq 1 60); do
   fi
 done
 grep "\[ui\|test" "$LOG" || cat /tmp/nxw-ui-test/app-output.txt
+if [ -n "${GITHUB_ACTIONS:-}" ]; then
+  grep "\[ui test\] FAIL" "$LOG" | sed 's/^/::error title=Interface test::/' || true
+  [ $result -ne 0 ] && ! grep -q "\[ui test\] DONE" "$LOG" && echo "::error title=Interface test::did not finish; app output: $(tail -c 1500 /tmp/nxw-ui-test/app-output.txt | tr '\n' ' ')"
+fi
 kill $APPPID 2>/dev/null || true
 kill $XVFB 2>/dev/null || true
 exit $result
