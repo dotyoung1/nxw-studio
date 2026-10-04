@@ -42,6 +42,7 @@ FetchContent_MakeAvailable(JUCE)
 if(UNIX AND NOT APPLE)
     set(JUCE_SOURCE_DIR "${juce_SOURCE_DIR}")
     include("${CMAKE_CURRENT_LIST_DIR}/cmake/PatchJuceLinuxWebView.cmake")
+    include("${CMAKE_CURRENT_LIST_DIR}/cmake/PatchJuceLinuxVst3RunLoop.cmake")
 endif()
 
 #---------------------------------------------------------------------------------------------------
