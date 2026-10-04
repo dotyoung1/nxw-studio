@@ -655,19 +655,19 @@ void Bridge::exportAudio (const juce::var& o, Completion done)
     {
         juce::AudioBuffer<float> master;
         std::vector<juce::AudioBuffer<float>> stems;
-        double lastSent = -1;
-        const bool ok = engPtr->renderOffline (req, master, stems, [&] (double p)
+        std::function<bool (double)> onProgress = [w = weak, c = cancel, lastSent = -1.0] (double p) mutable
         {
             if (p - lastSent > 0.02)
             {
                 lastSent = p;
-                juce::MessageManager::callAsync ([weak, p]
+                juce::MessageManager::callAsync ([w, p]
                 {
-                    if (auto* b = weak.get()) b->emit (obj ({ { "type", "export" }, { "stage", "render" }, { "progress", p } }));
+                    if (auto* b = w.get()) b->emit (obj ({ { "type", "export" }, { "stage", "render" }, { "progress", p } }));
                 });
             }
-            return ! cancel->load();
-        });
+            return ! c->load();
+        };
+        const bool ok = engPtr->renderOffline (req, master, stems, onProgress);
 
         juce::var result;
         if (! ok) result = obj ({ { "cancelled", true } });
