@@ -14,7 +14,11 @@ namespace nxw::paths
 {
 inline juce::File data()
 {
+   #if JUCE_MAC
+    auto f = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile ("Application Support/NXW Studio");
+   #else
     auto f = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile ("NXW Studio");
+   #endif
     f.createDirectory();
     return f;
 }
