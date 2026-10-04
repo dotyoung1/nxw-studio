@@ -198,7 +198,7 @@ function pluginPanel(ownerId, ref) {
   const st = NATIVE.status[ownerId];
   const box = h('div', { class: 'plug-panel' });
   if (!NATIVE.on) {
-    box.append(h('p', { class: 'empty' }, (ref && ref.name || 'This plugin') + ' is a VST3 plugin. It plays in the NXW Studio desktop app; in the browser it stays silent but is kept in the project.'));
+    box.append(h('p', { class: 'empty' }, (ref && ref.name || 'This plugin') + ' is a VST3 plugin. It runs in the NXW Studio desktop app; in the browser it is ' + (ref && ref.instrument ? 'silent' : 'bypassed') + ' but kept in the project.'));
     return box;
   }
   box.append(...[
