@@ -59,8 +59,8 @@
     await check(!!chById(ch.id) && NATIVE.status[ch.id] === 'loaded', 'redo brings it back');
 
     // A sound imported into the library plays through the native sampler
-    const sr = 44100, n = sr / 2, L = new Float32Array(n);
-    for (let i = 0; i < n; i++) L[i] = Math.sin(2 * Math.PI * 220 * i / sr) * Math.exp(-i / 20000) * 0.8;
+    const sr = 44100, n = sr * 8, L = new Float32Array(n);   // long and steady: the test audio device runs faster than real time
+    for (let i = 0; i < n; i++) L[i] = Math.sin(2 * Math.PI * 220 * i / sr) * 0.5;
     const wav = encodeWav(L, L, sr, 16);
     const ids = await runImport([{ file: new File([wav], 'ui-test-tone.wav', { type: 'audio/wav' }), name: 'ui-test-tone.wav', pack: 'UI Test', path: '' }], 'Importing');
     await check(ids.length === 1, 'sound imported into the library');
@@ -68,7 +68,8 @@
     let k2 = false;
     for (let i = 0; i < 40 && !k2; i++) { await sleep(150); k2 = !!(await NATIVE.call('hasSamples', ids))[ids[0]]; }
     await check(!!k2, 'the engine received the sound');
-    playNote(sch, A.ctx.currentTime, 60, 1, 0.4);
+    await sleep(600);    // the engine picks up the new sound with the next project update
+    playNote(sch, A.ctx.currentTime, 60, 1, 8);
     await until(() => peak() > 0.005, 3000);
     await check(peak() > 0.005, 'sampler channel plays the sound (peak ' + peak().toFixed(3) + ')');
 
