@@ -34,7 +34,10 @@ done
 grep "\[ui\|test" "$LOG" || cat /tmp/nxw-ui-test/app-output.txt
 if [ -n "${GITHUB_ACTIONS:-}" ]; then
   grep "\[ui test\] FAIL" "$LOG" | sed 's/^/::error title=Interface test::/' || true
-  [ $result -ne 0 ] && ! grep -q "\[ui test\] DONE" "$LOG" && echo "::error title=Interface test::did not finish; app output: $(tail -c 1500 /tmp/nxw-ui-test/app-output.txt | tr '\n' ' ')"
+  if [ $result -ne 0 ] && ! grep -q "\[ui test\] DONE" "$LOG"; then
+    echo "::error title=Interface test::did not finish; app output: $(tail -c 1500 /tmp/nxw-ui-test/app-output.txt | tr '\n' ' ')"
+    echo "::error title=App log::$(tail -n 60 "$LOG" | cut -c1-300 | sed ':a;N;$!ba;s/\n/%0A/g')"
+  fi
 fi
 kill $APPPID 2>/dev/null || true
 kill $XVFB 2>/dev/null || true
