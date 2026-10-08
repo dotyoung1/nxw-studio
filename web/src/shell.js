@@ -198,7 +198,11 @@ function patternMenu(anchor) {
     { label: 'Colour', disabled: true },
     ...PALETTE.slice(0, 5).map(c => ({ label: '', swatch: c, action: () => edit(() => { curPat().color = c; }) })),
     { sep: true },
+    { label: 'Export as MIDI file', action: () => exportPatternMidi(curPat()) },
+    { label: 'Import MIDI file…', action: () => pickMidiFile() },
+    { sep: true },
     { label: 'Clear pattern', action: () => edit(() => { curPat().notes = {}; }) },
+    { label: 'Delete unused patterns', hint: 'Patterns that are in no arrangement', action: deleteUnusedPatterns },
     { label: 'Delete pattern', danger: true, action: deletePatternAction });
   menuAt(anchor, items);
 }
@@ -304,7 +308,11 @@ function shortcutsAction() {
     ['Alt+click a lit step', 'Cycle its repeat: 2, 3, 4, 6 or 8 hits'], ['Right-click a channel', 'Cut itself, choke groups, fill, rotate'],
     ['Arrow at the top-left of a playlist clip', 'Clip menu: split by channel, make unique, rename'],
     ['Ctrl+drag', 'Select a group of notes or clips'], ['Shift+drag a clip or note', 'Duplicate it while moving'],
-    ['Delete · Ctrl+A · Ctrl+D', 'Delete selection · select all · duplicate selection'], ['↑ ↓ (Shift = octave)', 'Transpose selected notes'],
+    ['Delete · Ctrl+A · Ctrl+B', 'Delete selection · select all · duplicate selection'], ['Ctrl+C · Ctrl+X · Ctrl+V', 'Copy · cut · paste notes or clips (paste at the click or the playhead)'],
+    ['↑ ↓ (Shift = octave)', 'Transpose selected notes'], ['Double-click a note', 'Note properties'], ['Ctrl+M', 'Mute or unmute selected notes or clips'],
+    ['Ctrl+Q · Ctrl+L · Ctrl+G · Ctrl+U', 'Quantize · legato · glue · chop (piano roll)'],
+    ['Alt+A · Alt+S · Alt+F · Alt+K', 'Arpeggiate · strum · flam · limit to scale'], ['Alt+Y · Alt+R · Alt+X · Alt+O · Alt+I', 'Flip · humanize · compress velocity · velocity LFO · invert chords'],
+    ['Alt+T', 'Add a playlist marker at the playhead'], ['Shift+↑ ↓ in the browser', 'Load the next sound into the selected sampler'], ['F in the browser', 'Add or remove a favourite'],
     ['Ctrl+scroll · Alt+scroll', 'Zoom time · zoom keys'], ['Knobs and faders', 'Drag, scroll or use arrow keys; Shift for fine; double-click to reset'],
   ];
   dialog('Keyboard and mouse', h('table', { class: 'keys-tbl' }, rows.map(r => h('tr', null, h('td', null, ...r[0].split(' · ').flatMap((k, i) => i ? [' · ', h('kbd', null, k)] : [h('kbd', null, k)])), h('td', null, r[1])))));
@@ -323,7 +331,11 @@ function aboutAction() {
       h('li', null, h('b', null, 'Unlimited undo. '), 'Every edit, knob turn and mixer move can be undone.'),
       h('li', null, h('b', null, 'Export. '), 'Render the song, a pattern or the loop to WAV or MP3, with optional stems per mixer track.'),
       h('li', null, h('b', null, 'Packs. '), 'Import drum pack folders or .zip files; they stay in this browser between visits.'),
-      h('li', null, h('b', null, 'Cut itself and repeat. '), 'Right-click a channel for Cut itself and choke groups; the Repeat lane adds rolls and ratchets.')),
+      h('li', null, h('b', null, 'Cut itself and repeat. '), 'Right-click a channel for Cut itself and choke groups; the Repeat lane adds rolls and ratchets.'),
+      h('li', null, h('b', null, 'Capture. '), 'Play an idea on the keyboard without recording, then press Capture in the piano roll to keep it.'),
+      h('li', null, h('b', null, 'Chord tools. '), 'Chord progressions in any key, scale chords, chord names, arpeggiate, strum and pitch transformations.'),
+      h('li', null, h('b', null, 'Buses and sends. '), 'Route inserts into each other, add sends to a reverb bus, and set polarity, width and L/R swap per insert.'),
+      h('li', null, h('b', null, 'Arrangements and markers. '), 'Keep several versions of the song, mark sections, and insert or delete bars across every track.')),
     NATIVE.on ? h('p', null, 'Your work autosaves every few seconds. Use File › Save project to keep named project files; they include the settings of every plugin.')
       : h('p', null, 'Projects autosave in this browser. Use File › Save project file to keep a copy or move it to another device.'),
     NATIVE.on ? h('p', null, 'Plugins are scanned in a separate process, so a broken plugin cannot take the studio down with it. Data folder: ' + ((NATIVE.info && NATIVE.info.data) || ''))
@@ -360,6 +372,20 @@ UI.top = {
       tp.addEventListener('pointermove', mv); tp.addEventListener('pointerup', up); tp.addEventListener('pointercancel', up);
     });
     tp.addEventListener('wheel', e => { e.preventDefault(); wheelHistory(); P.bpm = clamp(Math.round(P.bpm) + (e.deltaY < 0 ? 1 : -1), 40, 300); onTempoChange(); touched(); this.render(); }, { passive: false });
+    // Tap tempo: the average of the last few taps; a pause of two seconds starts over.
+    const tap = $('#bTap'); let taps = [];
+    if (tap) tap.addEventListener('pointerdown', e => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      const now = performance.now();
+      if (taps.length && now - taps[taps.length - 1] > 2000) taps = [];
+      taps.push(now); if (taps.length > 6) taps.shift();
+      tap.classList.add('hit'); setTimeout(() => tap.classList.remove('hit'), 90);
+      if (taps.length < 2) { hint('Tap tempo · keep tapping'); return; }
+      const iv = (taps[taps.length - 1] - taps[0]) / (taps.length - 1), bpm = Math.round(clamp(60000 / iv, 40, 300) * 10) / 10;
+      if (taps.length === 2) Hist.push();
+      P.bpm = bpm; onTempoChange(); touched(); this.render(); hint('Tap tempo: ' + bpm + ' BPM');
+    });
     tp.addEventListener('dblclick', () => askText(tp, String(P.bpm), v => { const n = parseFloat(v); if (n >= 40 && n <= 300) edit(() => { P.bpm = Math.round(n * 1000) / 1000; onTempoChange(); }); else toast('Tempo must be between 40 and 300 BPM'); }));
     $('#timeLcd').onclick = () => { S.timeMode = S.timeMode === 'bars' ? 'time' : 'bars'; scheduleSave(); this.lastTime = ''; $('#timeL').textContent = S.timeMode === 'bars' ? 'Bar:beat:step' : 'Min:sec.ms'; };
     $('#timeL').textContent = S.timeMode === 'bars' ? 'Bar:beat:step' : 'Min:sec.ms';
@@ -389,7 +415,9 @@ UI.top = {
       { label: 'Save project as…', key: 'Ctrl+⇧+S', action: () => NATIVE.saveProject(true) }, { sep: true },
       { label: 'Export audio (WAV / MP3)…', icon: 'export', action: exportDialog }, { sep: true },
       { label: 'Import drum pack folder…', action: () => $('#dirIn').click() }, { label: 'Import drum pack .zip…', action: () => $('#zipIn').click() },
-      { label: 'Import audio files as channels…', action: () => $('#fileIn').click() }, { sep: true },
+      { label: 'Import audio files as channels…', action: () => $('#fileIn').click() },
+      { label: 'Import MIDI file…', action: () => pickMidiFile() },
+      { label: 'Export pattern as MIDI file', action: () => exportPatternMidi(curPat()) }, { sep: true },
       { label: 'Audio and MIDI settings…', action: () => NATIVE.call('audioSettings') },
       { label: 'Scan for plugins', action: () => NATIVE.scan(false) }, { label: 'Rescan all plugins', hint: 'Also retries plugins that failed before', action: () => NATIVE.scan(true) },
       { label: 'Plugin folders…', action: () => NATIVE.foldersDialog() }, { sep: true },
@@ -403,10 +431,14 @@ UI.top = {
       { label: 'Save now', key: 'Ctrl+S', action: () => { saveNow(); toast('Saved in this browser'); } },
       { label: 'Copy project JSON', action: copyProjectAction }, { label: 'Import project JSON…', action: importProjectAction }, { sep: true },
       { label: 'Import audio files as channels…', action: () => $('#fileIn').click() },
+      { label: 'Import MIDI file…', action: () => pickMidiFile() },
+      { label: 'Export pattern as MIDI file', action: () => exportPatternMidi(curPat()) },
     ];
     if (name === 'edit') return [
       { label: 'Undo', key: 'Ctrl+Z', action: () => Hist.undo(), disabled: !Hist.u.length }, { label: 'Redo', key: 'Ctrl+⇧+Z', action: () => Hist.redo(), disabled: !Hist.r.length }, { sep: true },
-      { label: 'Clear current pattern', action: () => edit(() => { curPat().notes = {}; }) }, { sep: true },
+      { label: 'Clear current pattern', action: () => edit(() => { curPat().notes = {}; }) },
+      { label: 'Capture what I just played', hint: 'Turns the notes you just played into a new pattern', action: () => captureNotes() },
+      { label: 'Chord progression…', action: () => UI.pr.progressionDialog() }, { sep: true },
       { label: 'Typing keyboard to piano', checked: S.typing, action: () => { S.typing = !S.typing; this.render(); } },
       { label: 'Metronome', checked: S.metro, action: () => { S.metro = !S.metro; this.render(); } },
     ];

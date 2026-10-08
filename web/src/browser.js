@@ -1,6 +1,18 @@
 /* ================================================================
    NXW STUDIO · browser: packs, sounds, presets, plugins, patterns
    ================================================================ */
+/* Favourites and recently used items are remembered per browser (in the view settings). */
+function brFavKey(k) { return /^(smp|drum|syn|gen|fx|vsti|vstfx):/.test(k) ? k : null; }
+function brToggleFav(k, label) {
+  S.brFav ||= {};
+  if (S.brFav[k]) { delete S.brFav[k]; hint('Removed from favourites'); } else { S.brFav[k] = label || k; hint('Added to favourites'); }
+  scheduleSave(); if (UI.br) { UI.br._sig = null; UI.br.render(); }
+}
+function brUsed(k, label) {
+  if (!brFavKey(k)) return;
+  S.brRecent = [{ k, l: label }].concat((S.brRecent || []).filter(r => r.k !== k)).slice(0, 15);
+  scheduleSave();
+}
 const BR_SECS = [
   ['packs', 'Packs'], ['drums', 'Drum synths'], ['synths', 'Synth presets'], ['plugins', 'Plugin database'], ['patterns', 'Patterns'], ['projects', 'Projects'],
 ];
@@ -31,7 +43,7 @@ function stopPreview() {
 function addFxToInsert(type, i) {
   i = clamp(i == null ? (S.mixSel || 1) : i, 0, NINS);
   const m = P.mixer[i];
-  if (m.fx.length >= 8) { toast(m.name + ' already has 8 effects'); return; }
+  if (m.fx.length >= FX_SLOTS) { toast(m.name + ' already has ' + FX_SLOTS + ' effects'); return; }
   edit(() => { m.fx.push(newFx(type)); S.mixSel = i; S.fxSel = m.fx.length - 1; });
   WM.show('mixer');
   toast(FX_DEFS[type].name + ' added to ' + (i ? 'insert ' + i : 'the master'));
@@ -45,7 +57,7 @@ UI.br = {
     if (S.brHidden && !WM.compact) el.hidden = true;
     S.brOpen ||= { 'sec:packs': true, 'sec:patterns': true };
     if (S.brAuto == null) S.brAuto = true;
-    const inp = h('input', { type: 'search', placeholder: 'Search', 'aria-label': 'Search the browser', id: 'brSearch' });
+    const inp = h('input', { type: 'search', placeholder: 'Search', 'aria-label': 'Search the browser', id: 'brSearch', 'data-hint': 'Search: every word must match; -word leaves things out; kick|snare finds either' });
     inp.addEventListener('input', () => { this.filter = inp.value.trim().toLowerCase(); this.render(); });
     inp.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'ArrowDown') { e.preventDefault(); this.list.focus(); this.move(1); } if (e.key === 'Escape') { inp.value = ''; this.filter = ''; this.render(); } });
     const imp = h('button', { class: 'btn primary br-imp', 'data-hint': 'Import a drum pack folder, a .zip pack or single sounds', html: icon('plus', 12) + '<span>Import</span>' });
@@ -94,22 +106,36 @@ UI.br = {
   buildRows() {
     const rows = [], f = this.filter;
     const sec = (id, label, n) => { const k = 'sec:' + id; rows.push({ k, kind: 'sec', label, count: n, open: f ? true : this.open(k), depth: 0 }); return f ? true : this.open(k); };
-    const smpRow = (m, depth, showPath) => rows.push({ k: 'smp:' + m.id, kind: 'smp', label: m.name, depth, sub: showPath ? m.pack + (m.path ? ' / ' + m.path : '') : (m.dur ? m.dur.toFixed(2) + 's' : ''), bad: m.bad });
+    const smpSub = m => { const t = nameTags(m.name + ' ' + (m.path || '')); return t; };
+    const smpRow = (m, depth, showPath) => rows.push({ k: 'smp:' + m.id, kind: 'smp', label: m.name, depth, sub: [smpSub(m), showPath ? m.pack + (m.path ? ' / ' + m.path : '') : (m.dur ? m.dur.toFixed(2) + 's' : '')].filter(Boolean).join(' · '), bad: m.bad });
     const tree = this.tree();
+    const ICON_ROW = k => { const [kind, ...r] = k.split(':'), id = r.join(':'); return { k, kind, id }; };
+    // Favourites and recently used come first (they survive searches too).
+    const listed = (arr, depth) => { for (const { k, l } of arr) { const { kind, id } = ICON_ROW(k); if (kind === 'smp' && !LIB.meta.has(id)) continue; if ((kind === 'vsti' || kind === 'vstfx') && !NATIVE.plugins.some(q => q.id === id)) continue; rows.push({ k, kind, label: kind === 'smp' ? (LIB.meta.get(id) || {}).name || l : l, depth, fav: !!(S.brFav || {})[k], dup: true }); } };
+    const favs = Object.entries(S.brFav || {}).map(([k, l]) => ({ k, l }));
     if (f) {
-      const match = s => s && s.toLowerCase().includes(f);
-      const hits = [...LIB.meta.values()].filter(m => match(m.name) || match(m.path) || match(m.pack)).sort((a, b) => natCmp(a.name, b.name));
+      const match = makeMatcher(f);
+      if (favs.length) { const fm = favs.filter(x => match(x.l)); if (fm.length && sec('fav', 'Favourites', fm.length)) listed(fm, 1); }
+      const hits = [...LIB.meta.values()].filter(m => match(m.name, m.path, m.pack)).sort((a, b) => natCmp(a.name, b.name));
       if (sec('packs', 'Sounds', hits.length)) hits.slice(0, 400).forEach(m => smpRow(m, 1, true));
-      const dr = DRUMS.map((d, i) => [d, i]).filter(([d]) => match(d.name) || match(d.kind));
+      const dr = DRUMS.map((d, i) => [d, i]).filter(([d]) => match(d.name, d.kind));
       if (dr.length && sec('drums', 'Drum synths', dr.length)) dr.forEach(([d, i]) => rows.push({ k: 'drum:' + i, kind: 'drum', label: d.name, depth: 1 }));
-      const sy = Object.keys(SYNTH_PRESETS).filter(match);
+      const sy = Object.keys(SYNTH_PRESETS).filter(n => match(n));
       if (sy.length && sec('synths', 'Synth presets', sy.length)) sy.forEach(n => rows.push({ k: 'syn:' + n, kind: 'syn', label: n, depth: 1 }));
       const pl = [...GENERATORS.filter(g => match(g.name)).map(g => ({ k: 'gen:' + g.gen, kind: 'gen', label: g.name, depth: 1 })), ...FX_ORDER.filter(t => match(FX_DEFS[t].name)).map(t => ({ k: 'fx:' + t, kind: 'fx', label: FX_DEFS[t].name, depth: 1 })),
-        ...NATIVE.plugins.filter(q => match(q.name) || match(q.vendor)).map(q => ({ k: (q.instrument ? 'vsti:' : 'vstfx:') + q.id, kind: q.instrument ? 'vsti' : 'vstfx', label: q.name, depth: 1, sub: q.instrument ? 'VST3 instrument' : 'VST3 effect' }))];
+        ...NATIVE.plugins.filter(q => match(q.name, q.vendor)).map(q => ({ k: (q.instrument ? 'vsti:' : 'vstfx:') + q.id, kind: q.instrument ? 'vsti' : 'vstfx', label: q.name, depth: 1, sub: q.instrument ? 'VST3 instrument' : 'VST3 effect' }))];
       if (pl.length && sec('plugins', 'Plugin database', pl.length)) rows.push(...pl);
+      const chs = P.channels.filter(c => match(c.name));
+      if (chs.length && sec('project', 'Current project', chs.length)) chs.forEach(c => rows.push({ k: 'chn:' + c.id, kind: 'chn', label: c.name, swatch: c.color, depth: 1, sub: 'channel' }));
       const pa = P.patterns.filter(p => match(p.name));
       if (pa.length && sec('patterns', 'Patterns', pa.length)) pa.forEach(p => rows.push({ k: 'pat:' + p.id, kind: 'pat', label: p.name, swatch: p.color, depth: 1 }));
       return rows;
+    }
+    if (favs.length && sec('fav', 'Favourites', favs.length)) listed(favs, 1);
+    if ((S.brRecent || []).length && sec('recent', 'Recently used', S.brRecent.length)) listed(S.brRecent, 1);
+    if (sec('project', 'Current project', P.channels.length)) {
+      if (!P.channels.length) rows.push({ k: 'note:project', kind: 'note', depth: 1, label: 'No channels yet.' });
+      P.channels.forEach(c => rows.push({ k: 'chn:' + c.id, kind: 'chn', label: c.name, swatch: c.color, depth: 1, cur: c.id === S.ch, sub: c.type === 'drum' ? 'drum' : c.type === 'synth' ? 'NX-3' : c.type === 'plugin' ? 'VST3' : 'sampler' }));
     }
     if (sec('packs', 'Packs', LIB.meta.size)) {
       if (!tree.length) rows.push({ k: 'note:packs', kind: 'note', depth: 1, label: 'Import a drum pack folder or .zip, or drop folders and sounds here. Everything you import is kept ' + (NATIVE.on ? 'on this computer.' : 'in this browser.') });
@@ -148,11 +174,12 @@ UI.br = {
   },
   render() {
     if (!this.list) return;
-    if (!sigChanged(this, [this.filter, S.brOpen, LIB.ver, P.patterns.map(q => [q.id, q.name, q.color, q.len]), S.pat, LIB.persistent, NATIVE.pluginsVer])) return;
+    if (!sigChanged(this, [this.filter, S.brOpen, LIB.ver, P.patterns.map(q => [q.id, q.name, q.color, q.len]), S.pat, S.ch, P.channels.map(c => [c.id, c.name, c.color, c.type]), LIB.persistent, NATIVE.pluginsVer, S.brFav, S.brRecent])) return;
     const st = this.list.scrollTop;
     this.rows = this.buildRows(); this.rowEls.clear();
     const frag = document.createDocumentFragment();
     const ICON = { smp: 'wave', drum: 'drum', syn: 'synth', gen: 'synth', fx: 'mixer', proj: 'file', vsti: 'piano', vstfx: 'mixer', act: 'plus' };
+    const seen = new Set();
     for (const r of this.rows) {
       const folder = r.kind === 'sec' || r.kind === 'pack' || r.kind === 'dir';
       const addable = ['smp', 'drum', 'syn', 'gen', 'fx', 'vsti', 'vstfx'].includes(r.kind);
@@ -163,6 +190,10 @@ UI.br = {
         r.sub ? h('span', { class: 'sub' }, r.sub) : null,
         r.count != null && r.kind !== 'sec' ? h('span', { class: 'cnt' }, r.count) : (r.kind === 'sec' ? h('span', { class: 'cnt' }, r.count) : null),
         addable ? h('button', { class: 'add', tabindex: -1, 'aria-label': 'Add ' + r.label, 'data-hint': r.kind === 'fx' || r.kind === 'vstfx' ? 'Add to the selected mixer insert' : 'Add to the channel rack', html: icon('plus', 11) }) : null);
+      if ((S.brFav || {})[r.k]) el.querySelector('.nm').append(h('span', { class: 'fav', 'aria-label': 'favourite', html: icon('starf', 10) }));
+      // The same item can be listed twice (favourites, recent); the first one owns the key.
+      if (seen.has(r.k)) { el.dataset.k = r.k; frag.append(el); continue; }
+      seen.add(r.k);
       if (r.k === S.brSel) el.classList.add('sel');
       frag.append(el); this.rowEls.set(r.k, el);
     }
@@ -183,6 +214,7 @@ UI.br = {
     else if (fromClick && r.kind === 'drum') { const d = DRUMS[+k.slice(5)]; previewChannel({ type: 'drum', params: { kind: d.kind, tune: d.tune, decay: d.decay, tone: d.tone } }); }
     else if (fromClick && r.kind === 'syn') this.previewSynth(k.slice(4));
     else if (fromClick && r.kind === 'pat') selectPattern(k.slice(4));
+    else if (fromClick && r.kind === 'chn') { S.ch = k.slice(4); renderAll(); }
     this.showPreview();
   },
   previewSynth(n) {
@@ -192,6 +224,7 @@ UI.br = {
   },
   activate(k) {
     const [kind, ...rest] = k.split(':'), id = rest.join(':');
+    const row = this.rowOf(k); brUsed(k, row ? row.label : id);
     if (kind === 'smp') addSampleChannel(id);
     else if (kind === 'drum') addChannel(specFromBrowser({ kind: 'drum', i: +id }));
     else if (kind === 'syn') addChannel({ type: 'synth', name: id, preset: id });
@@ -202,6 +235,7 @@ UI.br = {
     else if (kind === 'act' && id === 'scan') { if (NATIVE.scanning) NATIVE.call('cancelScan'); else NATIVE.scan(false); }
     else if (kind === 'act' && id === 'folders') NATIVE.foldersDialog();
     else if (kind === 'pat') { selectPattern(id); WM.show('rack'); }
+    else if (kind === 'chn') { const ch = chById(id); if (ch) { S.ch = id; if (ch.type === 'plugin' && NATIVE.on) NATIVE.openPlugin(id); else WM.show('inst'); renderAll(); } }
     else if (kind === 'proj') ({ demo: loadDemoAction, empty: newProjectAction, open: openProjectAction, save: saveProjectFile })[id]();
     else if (kind === 'sec' || kind === 'pack' || kind === 'dir') this.toggle(k);
   },
@@ -214,10 +248,16 @@ UI.br = {
     return [...LIB.meta.values()].filter(m => m.pack === pack && (!sub || m.path === sub || m.path.startsWith(sub + '/'))).map(m => m.id);
   },
   menu(k, x, y) {
-    const [kind, ...rest] = k.split(':'), id = rest.join(':'), ch = selCh();
+    const [kind, ...rest] = k.split(':'), id = rest.join(':'), ch = selCh(), row = this.rowOf(k);
+    const fav = brFavKey(k) ? { label: (S.brFav || {})[k] ? 'Remove from favourites' : 'Add to favourites', icon: 'star', key: 'F', action: () => brToggleFav(k, row ? row.label : id) } : null;
+    if (kind === 'chn') {
+      const c = chById(id); if (!c) return;
+      openMenu(x, y, [{ head: c.name }, { label: 'Select', action: () => { S.ch = id; renderAll(); } }, { label: 'Open settings', action: () => this.activate(k) }, { label: 'Open in piano roll', action: () => { S.ch = id; WM.show('pr'); renderAll(); } }]);
+      return;
+    }
     if (kind === 'smp') {
       const m = LIB.meta.get(id);
-      openMenu(x, y, [{ head: m ? m.name : 'Sound' },
+      openMenu(x, y, [{ head: m ? m.name : 'Sound' }, fav,
         { label: 'Preview', action: () => previewSampleId(id) },
         { label: 'Add to channel rack', action: () => addSampleChannel(id) },
         ch ? { label: 'Load into ' + ch.name, action: () => loadSampleInto(ch, id) } : null,
@@ -231,12 +271,13 @@ UI.br = {
         kind === 'pack' ? { label: 'Rename pack…', action: () => askText(this.rowEls.get(k), name, v => this.renamePack(name, v)) } : null,
         { sep: true }, { label: 'Delete ' + (kind === 'pack' ? 'pack' : 'folder') + ' from library', danger: true, action: () => this.confirmDelete(ids, ids.length + ' sounds in ' + name) }]);
     } else if (kind === 'fx') {
-      openMenu(x, y, [{ head: FX_DEFS[id].name }, ...P.mixer.map((m, i) => ({ label: 'Add to ' + (i ? i + ' · ' : '') + m.name, action: () => addFxToInsert(id, i) }))]);
+      openMenu(x, y, [{ head: FX_DEFS[id].name }, fav, ...P.mixer.map((m, i) => ({ label: 'Add to ' + (i ? i + ' · ' : '') + m.name, action: () => addFxToInsert(id, i) }))]);
     } else if (kind === 'vstfx') {
       const q = NATIVE.plugins.find(z => z.id === id);
-      openMenu(x, y, [{ head: q ? q.name : 'Effect' }, ...P.mixer.map((m, i) => ({ label: 'Add to ' + (i ? i + ' · ' : '') + m.name, action: () => NATIVE.addPluginFx(id, i) }))]);
+      openMenu(x, y, [{ head: q ? q.name : 'Effect' }, fav, ...P.mixer.map((m, i) => ({ label: 'Add to ' + (i ? i + ' · ' : '') + m.name, action: () => NATIVE.addPluginFx(id, i) }))]);
     } else if (kind === 'pat') patternMenu(this.rowEls.get(k));
-    else if (['drum', 'syn', 'gen', 'vsti'].includes(kind)) openMenu(x, y, [{ label: 'Add to channel rack', action: () => this.activate(k) }]);
+    else if (['drum', 'syn', 'gen', 'vsti'].includes(kind)) openMenu(x, y, [{ label: 'Add to channel rack', action: () => this.activate(k) }, fav,
+      ch && kind !== 'gen' ? { label: 'Replace ' + ch.name + ' with this', action: () => replaceInstrument(ch, kind === 'drum' ? specFromBrowser({ kind: 'drum', i: +id }) : kind === 'syn' ? { type: 'synth', name: id, preset: id } : specFromBrowser({ kind: 'vsti', id })) } : null]);
   },
   async renamePack(from, to) {
     if (!to || to === from) return;
@@ -258,8 +299,16 @@ UI.br = {
   key(e) {
     const r = this.rowOf(S.brSel);
     const k = e.key;
+    // Shift+arrows browse sounds straight into the selected sampler channel (as in FL Studio).
+    if ((k === 'ArrowDown' || k === 'ArrowUp') && e.shiftKey) {
+      e.preventDefault(); e.stopPropagation(); this.move(k === 'ArrowDown' ? 1 : -1);
+      const nr = this.rowOf(S.brSel), ch = selCh();
+      if (nr && nr.kind === 'smp' && ch && ch.type === 'sampler') { const id = nr.k.slice(4); Hist.push(); ensureSample(id); ch.sample = id; ch.name = sampleName(id) || ch.name; touched(); renderAll(); }
+      return;
+    }
     if (k === 'ArrowDown' || k === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); this.move(k === 'ArrowDown' ? 1 : -1); return; }
     if (!r) return;
+    if ((k === 'f' || k === 'F') && !e.ctrlKey && !e.metaKey && brFavKey(r.k)) { e.preventDefault(); e.stopPropagation(); brToggleFav(r.k, r.label); return; }
     const folder = r.kind === 'sec' || r.kind === 'pack' || r.kind === 'dir';
     if (k === 'ArrowRight' && folder) { e.preventDefault(); e.stopPropagation(); if (!r.open) this.toggle(r.k, true); else this.move(1); }
     else if (k === 'ArrowLeft') { e.preventDefault(); e.stopPropagation(); if (folder && r.open) this.toggle(r.k, false); else { const i = this.rows.indexOf(r); for (let j = i - 1; j >= 0; j--) if (this.rows[j].depth < r.depth && this.rows[j].kind !== 'note') { this.select(this.rows[j].k, false); break; } } }
@@ -294,6 +343,7 @@ UI.br = {
 };
 function loadSampleInto(ch, id) {
   ensureSample(id);
+  brUsed('smp:' + id, sampleName(id) || 'Sound');
   edit(() => {
     if (ch.type !== 'sampler') { ch.type = 'sampler'; ch.params = { pitch: 0, start: 0, att: 0.002, rel: 0.12, gain: 0.8, rev: false, oneshot: true }; delete ch.preset; }
     ch.sample = id; ch.name = sampleName(id) || ch.name;

@@ -117,7 +117,16 @@ python tests/compare_render.py "build/NXWStudio_artefacts/Release/NXW Studio"   
 ```
 
 `compare_render.py` renders the demo song with both engines and compares loudness over time
-and tone per mixer track; they match within about 1 dB.
+and tone per mixer track; they match within about 1 dB. `tests/features.json` does the same for
+mixer buses and sends, stereo tools, clip offsets, muted clips and notes, and per-channel swing:
+
+```bash
+python tests/compare_render.py "build/NXWStudio_artefacts/Release/NXW Studio" tests/features.json
+```
+
+Anything that changes the sound is implemented twice, in `web/src/audio.js` and in
+`desktop/Source/engine`, and both read the same project JSON. The mixer routing graph (outputs,
+sends, loop protection, solo) is built the same way in `mixGraph()` and `Model::buildMixGraph()`.
 
 ## Releasing an update
 

@@ -44,6 +44,7 @@ UI.inst = {
     kr.append(
       h('div', { class: 'kcell' }, Knob({ def: { label: 'Volume', min: 0, max: 1, def: 0.78, unit: 'vol' }, value: ch.vol, size: 38, label: true, showVal: true, name: ch.name + ' volume', onStart: () => Hist.push(), onChange: v => { ch.vol = v; syncChannel(ch); }, onEnd: () => { touched(); if (UI.rack) UI.rack.render(); } })),
       h('div', { class: 'kcell' }, Knob({ def: { label: 'Pan', min: -1, max: 1, def: 0, unit: 'pan', bipolar: true }, value: ch.pan, size: 38, label: true, showVal: true, name: ch.name + ' pan', onStart: () => Hist.push(), onChange: v => { ch.pan = v; syncChannel(ch); }, onEnd: () => { touched(); if (UI.rack) UI.rack.render(); } })),
+      h('div', { class: 'kcell' }, Knob({ def: { label: 'Swing', min: 0, max: 1, def: 1, unit: '%' }, value: ch.swing ?? 1, size: 38, label: true, showVal: true, name: ch.name + ' swing amount', onStart: () => Hist.push(), onChange: v => { if (v > 0.995) delete ch.swing; else ch.swing = r2(v); }, onEnd: touched })),
       h('div', { class: 'kcell', style: { alignSelf: 'center', gap: '6px' } }, h('span', { class: 'lbl', style: { fontSize: '8.5px', letterSpacing: '.16em', color: 'var(--text-faint)' } }, 'MIXER'), route));
     const grp = h('select', { class: 'sel-box', id: 'instChoke', 'aria-label': 'Choke group', 'data-hint': 'Channels in the same choke group stop each other' }, [0, 1, 2, 3, 4].map(g => h('option', { value: g }, g ? 'Choke group ' + g : 'No choke group')));
     grp.value = String(ch.cutGroup || 0); grp.onchange = () => edit(() => { ch.cutGroup = +grp.value; });
@@ -113,9 +114,32 @@ UI.inst = {
     const tog = (k, label, hn) => h('button', { class: 'btn' + (p[k] ? ' on' : ''), 'aria-pressed': String(!!p[k]), 'data-hint': hn, onclick: () => edit(() => { p[k] = !p[k]; }) }, label);
     B.append(h('div', { class: 'panel' }, h('h5', null, s ? s.name + ' · ' + s.dur.toFixed(2) + ' s' : loading ? 'Loading sound…' : 'No sound loaded'),
       s ? this.waveCv : h('p', { class: 'br-note', style: { padding: '0 0 10px' } }, loading ? 'Reading it from your library.' : 'Drag a sound from your packs onto this channel, or load a file.'),
-      h('div', { class: 'krow', style: { alignItems: 'center' } }, repl, fromLib, tog('rev', 'Reverse', 'Play the sample backwards'), tog('oneshot', 'One-shot', 'On: play the whole sample. Off: stop when the note ends.'))));
-    B.append(h('div', { class: 'panel' }, h('h5', null, 'Playback'), h('div', { class: 'krow' }, SAMPLER_PARAMS.map(d => this.knobFor(ch, d, { after: () => this.drawWave() })))));
+      s ? h('p', { class: 'br-note', style: { padding: '0 0 8px' } }, 'Drag the markers: start (copper), end (white)' + (p.loop ? ' and loop start (green)' : '') + '.') : null,
+      h('div', { class: 'krow', style: { alignItems: 'center', flexWrap: 'wrap', gap: '6px' } }, repl, fromLib, tog('rev', 'Reverse', 'Play the sample backwards'), tog('oneshot', 'One-shot', 'On: play the whole sample. Off: stop when the note ends.'),
+        tog('loop', 'Loop', 'Loop between the loop start and the end marker while the note is held'), tog('norm', 'Normalize', 'Play the sample as loud as it can go without clipping'))));
+    const after = { after: () => this.drawWave() };
+    B.append(h('div', { class: 'panel' }, h('h5', null, 'Playback'), h('div', { class: 'krow' }, SAMPLER_PARAMS.map(d => this.knobFor(ch, d, after)), p.loop ? this.knobFor(ch, SAMPLER_LOOP, after) : null)));
+    B.append(h('div', { class: 'panel' }, h('h5', null, 'Envelope'), h('div', { class: 'krow' }, SAMPLER_ENV.map(d => this.knobFor(ch, d)))));
+    const ft = p.ft | 0;
+    const fseg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Filter type' }, SAMPLER_FILTER_TYPES.map((l, i) => h('button', { class: ft === i ? 'on' : '', onclick: () => edit(() => { if (i) p.ft = i; else delete p.ft; }) }, l)));
+    B.append(h('div', { class: 'panel' }, h('h5', null, 'Filter'), h('div', { class: 'krow', style: { alignItems: 'center' } }, fseg, ...(ft ? SAMPLER_FILTER.map(d => this.knobFor(ch, d)) : []))));
     if (s) requestAnimationFrame(() => this.drawWave());
+    if (s) this.waveCv.addEventListener('pointerdown', e => this.waveDown(e, ch));
+  },
+  /* Start, end and loop-start markers can be dragged on the waveform. */
+  waveDown(e, ch) {
+    const cv = this.waveCv, r = cv.getBoundingClientRect(), W = r.width, p = ch.params;
+    const sp = samplerSpan(p), x = e.clientX - r.left;
+    const marks = [['start', sp.st], ['end', sp.en]].concat(p.loop ? [['ls', sp.ls]] : []);
+    let best = null, bd = 1e9;
+    for (const [k, v] of marks) { const d = Math.abs(v * W - x); if (d < bd) { bd = d; best = k; } }
+    if (bd > 14) best = x / W < sp.st + (sp.en - sp.st) / 2 ? 'start' : 'end';
+    e.preventDefault(); cv.setPointerCapture(e.pointerId); Hist.push();
+    const lim = { start: [0, 0.95], end: [0.05, 1], ls: [0, 0.95] }[best];
+    const mv = ev => { const v = r2(clamp((ev.clientX - r.left) / W, lim[0], lim[1]) * 1000) / 1000; p[best] = Math.round(v * 1000) / 1000; this.drawWave(); hint({ start: 'Start', end: 'End', ls: 'Loop start' }[best] + ' ' + Math.round(v * 100) + '%'); };
+    mv(e);
+    const up = () => { cv.removeEventListener('pointermove', mv); cv.removeEventListener('pointerup', up); cv.removeEventListener('pointercancel', up); this._sig = null; touched(); this.render(); };
+    cv.addEventListener('pointermove', mv); cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
   },
   drawWave() {
     const cv = this.waveCv, ch = this.waveCh; if (!cv || !ch || !cv.clientWidth) return;
@@ -128,9 +152,11 @@ UI.inst = {
       const mn = s.peaks[i * 2], mx = s.peaks[i * 2 + 1];
       ctx.fillRect(x, H / 2 - mx * (H / 2 - 4), 1, Math.max(1, (mx - mn) * (H / 2 - 4)));
     }
-    const st = (ch.params.start || 0) * W;
-    ctx.fillStyle = 'rgba(9,12,14,0.6)'; ctx.fillRect(0, 0, st, H);
-    ctx.fillStyle = CSSV.copper; ctx.fillRect(st, 0, 1.5, H);
+    const sp = samplerSpan(ch.params), st = sp.st * W, en = sp.en * W;
+    ctx.fillStyle = 'rgba(9,12,14,0.6)'; ctx.fillRect(0, 0, st, H); ctx.fillRect(en, 0, W - en, H);
+    if (ch.params.loop) { const lx = sp.ls * W; ctx.fillStyle = hexA(CSSV.verdigris, 0.12); ctx.fillRect(lx, 0, en - lx, H); ctx.fillStyle = CSSV.verdigris; ctx.fillRect(lx, 0, 1.5, H); ctx.beginPath(); ctx.moveTo(lx, 0); ctx.lineTo(lx + 7, 0); ctx.lineTo(lx, 7); ctx.fill(); }
+    ctx.fillStyle = CSSV.text; ctx.fillRect(en - 1.5, 0, 1.5, H); ctx.beginPath(); ctx.moveTo(en, H); ctx.lineTo(en - 7, H); ctx.lineTo(en, H - 7); ctx.fill();
+    ctx.fillStyle = CSSV.copper; ctx.fillRect(st, 0, 1.5, H); ctx.beginPath(); ctx.moveTo(st, 0); ctx.lineTo(st + 7, 0); ctx.lineTo(st, 7); ctx.fill();
   },
   keysUI(ch, B) {
     const lo = (S.oct + 1) * 12, hi = lo + 24;

@@ -198,7 +198,7 @@ NATIVE.addPluginFx = (id, insert) => {
   const p = NATIVE.plugins.find(x => x.id === id);
   if (!p) return;
   const i = clamp(insert == null ? (S.mixSel || 1) : insert, 0, NINS), m = P.mixer[i];
-  if (m.fx.length >= 8) { toast(m.name + ' already has 8 effects'); return; }
+  if (m.fx.length >= FX_SLOTS) { toast(m.name + ' already has ' + FX_SLOTS + ' effects'); return; }
   const f = { id: uid(), type: 'plugin', on: true, p: {}, plugin: NATIVE.pluginRef(p) };
   edit(() => { m.fx.push(f); S.mixSel = i; S.fxSel = m.fx.length - 1; });
   WM.show('mixer');

@@ -1,6 +1,24 @@
 /* ================================================================
    NXW STUDIO · mixer
    ================================================================ */
+const FX_SLOTS = 10;
+let MIX_CLIP = null;     // copied effect chain
+/** Inserts that insert i may feed without making a loop. */
+function routeTargets(i) {
+  const g = mixGraph();
+  return P.mixer.map((m, j) => j).filter(j => j !== i && (j === 0 || !mixReaches(g, j, i)));
+}
+function setRoute(i, r) { edit(() => { const m = P.mixer[i]; if (r) m.route = r; else delete m.route; if (m.sends) m.sends = m.sends.filter(s => s.to !== r); }); hint((i ? 'Insert ' + i : 'Master') + ' → ' + (r ? 'insert ' + r + ' · ' + P.mixer[r].name : 'Master')); }
+function addSend(i, to) { edit(() => { const m = P.mixer[i]; m.sends = (m.sends || []).filter(s => s.to !== to); m.sends.push({ to, lvl: 0.7906 }); }); hint('Insert ' + i + ' sends to ' + (to ? 'insert ' + to : 'the master')); }
+function copyFxChain(i) { MIX_CLIP = JSON.parse(JSON.stringify(P.mixer[i].fx)); MIX_CLIP.from = P.mixer[i].fx.map(f => f.id); hint('Copied ' + MIX_CLIP.length + ' effects'); }
+function pasteFxChain(i) {
+  if (!MIX_CLIP) return;
+  const m = P.mixer[i];
+  const add = MIX_CLIP.slice(0, Math.max(0, FX_SLOTS - m.fx.length)).map((f, k) => { const c = JSON.parse(JSON.stringify(f)); c.id = uid(); c.src = MIX_CLIP.from[k]; return c; });
+  if (!add.length) { toast(m.name + ' has no free effect slots'); return; }
+  edit(() => { for (const c of add) { const src = c.src; delete c.src; m.fx.push(c); if (NATIVE.on && c.type === 'plugin') NATIVE.call('copyPluginState', src, c.id); } });
+  toast('Pasted ' + add.length + ' effects into ' + m.name);
+}
 UI.mixer = {
   strips: [], meterGrad: null,
   init() {
@@ -15,7 +33,7 @@ UI.mixer = {
   sel() { return clamp(S.mixSel | 0, 0, NINS); },
   render() {
     // Strips are rebuilt only when names, routing or effect slots change; levels, pans and buttons update in place.
-    const struct = JSON.stringify([P.mixer.map(m => [m.name, m.fx.map(f => f.type + (f.on ? 1 : 0))]), P.channels.map(c => [c.name, c.mixer, c.color])]);
+    const struct = JSON.stringify([P.mixer.map(m => [m.name, m.color, m.route, m.sends, m.fxOff, m.fx.map(f => f.type + (f.on ? 1 : 0))]), P.channels.map(c => [c.name, c.mixer, c.color])]);
     if (struct !== this._struct || this.strips.length !== P.mixer.length) {
       this._struct = struct; this._side = null;
       const sl = this.stripsEl.scrollLeft;
@@ -34,19 +52,19 @@ UI.mixer = {
       }
     }
     for (const s of this.strips) s.el.classList.toggle('sel', s.i === this.sel());
-    const side = JSON.stringify([S.mixSel, S.fxSel, P.mixer[this.sel()]]);
+    const side = JSON.stringify([S.mixSel, S.fxSel, S.mixTab, P.mixer[this.sel()], P.mixer.map(m => m.name)]);
     if (side !== this._side) { this._side = side; this.renderSide(); }
     const m = P.mixer[this.sel()];
     this.w.sub.textContent = '· ' + (this.sel() ? 'Insert ' + this.sel() + ' · ' : '') + m.name;
   },
   strip(m, i) {
     const srcs = P.channels.filter(c => (c.mixer | 0) === i).map(c => c.name);
-    const color = i ? (P.channels.find(c => c.mixer === i) || {}).color : null;
+    const color = m.color || (i ? (P.channels.find(c => c.mixer === i) || {}).color : null);
     const el = h('div', { class: 'strip' + (i === 0 ? ' master' : '') + (i === this.sel() ? ' sel' : ''), style: { '--sc': color || null }, 'data-hint': (i ? 'Insert ' + i : 'Master') + ' · click to show its effects, right-click for options' });
     const nameB = h('button', { class: 's-name', 'aria-label': 'Rename ' + m.name }, m.name);
     nameB.ondblclick = e => { e.stopPropagation(); askText(nameB, m.name, v => edit(() => { m.name = v; })); };
     const dots = h('div', { class: 's-fx', 'aria-hidden': 'true' });
-    for (let k = 0; k < 8; k++) { const f = m.fx[k]; dots.append(h('i', { class: f ? 'u' + (f.on ? '' : ' off') : '' })); }
+    for (let k = 0; k < FX_SLOTS; k++) { const f = m.fx[k]; dots.append(h('i', { class: f ? 'u' + (f.on && !m.fxOff ? '' : ' off') : '' })); }
     const pan = Knob({ def: { label: 'Pan', min: -1, max: 1, def: 0, unit: 'pan', bipolar: true }, name: m.name + ' pan', value: m.pan, size: 26,
       onStart: () => Hist.push(), onChange: v => { m.pan = v; if (A.ctx) A.strips[i].panTo(v); }, onEnd: touched });
     const meter = h('canvas', { class: 's-meter', 'aria-hidden': 'true' });
@@ -62,17 +80,30 @@ UI.mixer = {
       nameB, dots, pan,
       h('div', { class: 's-mid' }, meter, fader), db,
       h('div', { class: 's-btns' }, mb, sb),
-      h('div', { class: 's-src', title: srcs.join(', ') }, i === 0 ? 'Output' : (srcs.join(', ') || '—')));
+      h('div', { class: 's-src', title: srcs.join(', ') }, i === 0 ? 'Output' : (srcs.join(', ') || '—')),
+      ...(i && (m.route || (m.sends && m.sends.length)) ? [h('div', { class: 's-rt', 'data-hint': 'Output: ' + (m.route ? 'insert ' + m.route : 'master') + ((m.sends || []).length ? ' · sends to ' + m.sends.map(x => x.to || 'M').join(', ') : '') }, '→ ' + (m.route || 'M') + ((m.sends || []).length ? ' +' + m.sends.length : ''))] : []));
     el.addEventListener('click', () => { if (S.mixSel !== i) { S.mixSel = i; S.fxSel = 0; scheduleSave(); this.render(); } });
     el.addEventListener('contextmenu', e => {
       e.preventDefault();
       const ch = selCh();
+      const tg = i ? routeTargets(i) : [];
       openMenu(e.clientX, e.clientY, [
         { head: (i ? 'Insert ' + i + ' · ' : '') + m.name },
         { label: 'Rename…', action: () => askText(nameB, m.name, v => edit(() => { m.name = v; })) },
         ch && i ? { label: 'Route ' + ch.name + ' here', action: () => edit(() => { ch.mixer = i; }) } : null,
-        { label: 'Reset volume and pan', action: () => edit(() => { m.vol = 0.7906; m.pan = 0; }) },
+        i ? { label: 'Output to…', icon: 'route', hint: 'Send this insert to the master or into another insert (a bus)', action: () => openMenu(e.clientX + 16, e.clientY + 30, [{ head: 'Output of ' + m.name }, ...tg.map(j => ({ label: j ? j + ' · ' + P.mixer[j].name : 'Master', checked: (m.route | 0) === j, action: () => setRoute(i, j) }))]) } : null,
+        i ? { label: 'Add a send to…', hint: 'Also send a copy to another insert, such as a reverb bus', action: () => openMenu(e.clientX + 16, e.clientY + 30, [{ head: 'Send ' + m.name + ' to' }, ...tg.filter(j => j !== (m.route | 0)).map(j => ({ label: j ? j + ' · ' + P.mixer[j].name : 'Master', checked: (m.sends || []).some(x => x.to === j), action: () => addSend(i, j) }))]) } : null,
+        { sep: true },
+        { label: 'Polarity invert', checked: !!m.phase, action: () => edit(() => { m.phase = !m.phase; }) },
+        { label: 'Swap left and right', checked: !!m.swap, action: () => edit(() => { m.swap = !m.swap; }) },
+        { label: 'Bypass all effects', checked: !!m.fxOff, action: () => edit(() => { m.fxOff = !m.fxOff; }) },
+        { sep: true },
+        { label: 'Copy effects', disabled: !m.fx.length, action: () => copyFxChain(i) },
+        { label: 'Paste effects', disabled: !MIX_CLIP, action: () => pasteFxChain(i) },
+        { label: 'Reset volume, pan and stereo', action: () => edit(() => { m.vol = 0.7906; m.pan = 0; delete m.width; delete m.phase; delete m.swap; }) },
         { label: 'Remove all effects', danger: true, disabled: !m.fx.length, action: () => edit(() => { m.fx = []; }) },
+        { head: 'Colour' }, ...PALETTE.map(c => ({ label: c === m.color ? 'Current' : '', swatch: c, action: () => edit(() => { m.color = c; }) })),
+        m.color ? { label: 'No colour', action: () => edit(() => { delete m.color; }) } : null,
       ]);
     });
     // Effects dragged from the browser's plugin database land on the strip they are dropped on.
@@ -84,9 +115,15 @@ UI.mixer = {
   renderSide() {
     const i = this.sel(), m = P.mixer[i], sd = this.side;
     sd.textContent = '';
-    sd.append(h('h3', null, h('span', null, m.name), h('small', null, i ? 'INSERT ' + i : 'MASTER')));
-    const slots = h('div', { class: 'slots' });
-    for (let k = 0; k < 8; k++) {
+    const tab = S.mixTab === 'route' ? 'route' : 'fx';
+    const tabs = h('div', { class: 'seg mx-tabs', role: 'tablist' }, [['fx', 'Effects'], ['route', 'Routing']].map(([k, l]) => h('button', { class: tab === k ? 'on' : '', role: 'tab', 'aria-selected': String(tab === k), onclick: () => { S.mixTab = k; scheduleSave(); this.renderSide(); } }, l)));
+    const byp = h('button', { class: 'btn ghost mx-byp' + (m.fxOff ? ' on' : ''), 'aria-pressed': String(!!m.fxOff), 'data-hint': m.fxOff ? 'All effects on this track are bypassed · click to turn them back on' : 'Bypass every effect on this track (compare with and without)', html: icon('power', 13) + '<span>' + (m.fxOff ? 'FX off' : 'FX on') + '</span>', onclick: () => edit(() => { m.fxOff = !m.fxOff; }) });
+    sd.append(h('h3', null, h('span', null, m.name), h('small', null, i ? 'INSERT ' + i : 'MASTER'), h('span', { style: { flex: '1' } }), tabs));
+    if (tab === 'route') { this.renderRouting(i, m, sd); return; }
+    sd.append(h('div', { class: 'mx-fxbar' }, byp, h('button', { class: 'btn ghost', disabled: !m.fx.length, 'data-hint': 'Copy this effect chain', onclick: () => copyFxChain(i) }, 'Copy'), h('button', { class: 'btn ghost', disabled: !MIX_CLIP, 'data-hint': 'Paste the copied effects after the ones here', onclick: () => pasteFxChain(i) }, 'Paste')));
+    const slots = h('div', { class: 'slots' + (m.fxOff ? ' bypassed' : '') });
+    // Used slots plus one free one (up to ten), so the effect editor below keeps its room.
+    for (let k = 0; k < Math.min(FX_SLOTS, m.fx.length + 1); k++) {
       const f = m.fx[k];
       if (f) {
         const def = fxDef(f);
@@ -129,6 +166,39 @@ UI.mixer = {
       this.grFx = f.type === 'comp' ? S.fxSel : -1;
     }
     sd.append(panel);
+  },
+  renderRouting(i, m, sd) {
+    const box = h('div', { class: 'fxp mx-route' });
+    const g = mixGraph();
+    const feeds = P.mixer.map((x, j) => j).filter(j => j > 0 && j !== i && (g.route[j] === i || g.sends[j].some(z => z.to === i)));
+    const chans = P.channels.filter(c => (c.mixer | 0) === i).map(c => c.name);
+    box.append(h('p', { class: 'empty' }, 'Input: ' + ([...chans, ...feeds.map(j => 'insert ' + j + ' (' + P.mixer[j].name + ')')].join(', ') || 'nothing yet')));
+    if (i > 0) {
+      const tg = routeTargets(i);
+      const out = h('select', { class: 'sel-box', id: 'mxOut', 'aria-label': 'Output' }, tg.map(j => h('option', { value: j }, j ? j + ' · ' + P.mixer[j].name : 'Master')));
+      out.value = String(g.route[i]); out.onchange = () => setRoute(i, +out.value);
+      box.append(h('div', { class: 'frow' }, h('span', null, 'Output'), out));
+      const sl = h('div', { class: 'mx-sends' });
+      for (const sd2 of g.sends[i]) {
+        const s0 = (m.sends || []).find(z => z.to === sd2.to); if (!s0) continue;
+        sl.append(h('div', { class: 'mx-send' }, h('span', { class: 'nm' }, '→ ' + (sd2.to ? sd2.to + ' · ' + P.mixer[sd2.to].name : 'Master')),
+          Knob({ def: { label: 'Send level', min: 0, max: 1, def: 0.7906, unit: 'fader' }, value: s0.lvl, size: 26, name: 'Send to ' + (sd2.to ? 'insert ' + sd2.to : 'master'), color: CSSV.copper,
+            onStart: () => Hist.push(), onChange: v => { s0.lvl = v; syncStrip(i); }, onEnd: touched }),
+          h('button', { class: 'win-btn', 'aria-label': 'Remove send', 'data-hint': 'Remove this send', html: icon('x', 11), onclick: () => edit(() => { m.sends = m.sends.filter(z => z !== s0); }) })));
+      }
+      const free = tg.filter(j => j !== g.route[i] && !g.sends[i].some(z => z.to === j));
+      const add = h('select', { class: 'sel-box', 'aria-label': 'Add a send' }, h('option', { value: '' }, '+ Add a send…'), free.map(j => h('option', { value: j }, j ? j + ' · ' + P.mixer[j].name : 'Master')));
+      add.onchange = () => { if (add.value !== '') addSend(i, +add.value); };
+      box.append(h('h4', null, 'Sends', h('span', null, 'POST-FADER')), sl, add);
+    }
+    box.append(h('h4', { style: { marginTop: '14px' } }, 'Stereo'));
+    const tog = (k, label, hn) => h('button', { class: 'btn' + (m[k] ? ' on' : ''), 'aria-pressed': String(!!m[k]), 'data-hint': hn, onclick: () => edit(() => { if (m[k]) delete m[k]; else m[k] = true; }) }, label);
+    box.append(h('div', { class: 'krow', style: { alignItems: 'center', gap: '8px' } },
+      h('div', { class: 'kcell' }, Knob({ def: { label: 'Separation', min: 0, max: 2, def: 1, unit: 'x' }, value: m.width ?? 1, size: 36, label: true, showVal: true, name: m.name + ' stereo separation', color: CSSV.copper,
+        onStart: () => Hist.push(), onChange: v => { if (Math.abs(v - 1) < 0.02) delete m.width; else m.width = r2(v); syncStrip(i); }, onEnd: touched })),
+      tog('phase', 'Ø Polarity', 'Invert the polarity (phase) of both sides'), tog('swap', 'Swap L/R', 'Swap the left and right sides')));
+    box.append(h('p', { class: 'empty', style: { marginTop: '10px' } }, 'Separation: 0 is mono, 1 is unchanged, 2 is extra wide.'));
+    sd.append(box);
   },
   slotMenu(m, k) {
     return [

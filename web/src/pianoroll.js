@@ -49,6 +49,12 @@ UI.pr = {
     this.cv.addEventListener('pointerdown', e => this.down(e));
     this.cv.addEventListener('pointermove', e => { if (!this.drag) this.hover(e); });
     this.cv.addEventListener('contextmenu', e => e.preventDefault());
+    // Double-click a note for its properties (not the note the first click just drew).
+    this.cv.addEventListener('dblclick', e => {
+      const { x, y } = this.local(e); if (x < this.KW || y < this.RH) return;
+      const hh = this.hit(x, y);
+      if (hh && !(hh.n === this.lastCreated && performance.now() - this.lastCreatedAt < 700)) this.propsDialog(hh.n);
+    });
     this.vcv.addEventListener('pointerdown', e => this.velDown(e));
     this.vcv.addEventListener('contextmenu', e => e.preventDefault());
     // MIDI files dropped on the piano roll are imported.
@@ -145,7 +151,6 @@ UI.pr = {
     if (e.button === 2) tool = 'erase'; else if (e.ctrlKey || e.metaKey) tool = 'select';
     const h0 = this.hit(x, y);
     this.cursorT = Math.max(0, snapFloor(this.stepAt(x), S.prSnap));
-    if (h0 && e.button === 0 && e.detail === 2 && !(h0.n === this.lastCreated && performance.now() - this.lastCreatedAt < 700)) { finish(); this.drag = null; this.propsDialog(h0.n); return; }
     if (tool === 'erase') {
       Hist.push();
       const er = (xx, yy) => { const hh = this.hit(xx, yy); if (hh) { ns.splice(ns.indexOf(hh.n), 1); this.sel.delete(hh.n); VER++; this.dirty = true; } };

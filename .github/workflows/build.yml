@@ -89,6 +89,12 @@ jobs:
           Get-Content "$env:RUNNER_TEMP\render.txt"
           if ($p.ExitCode -ne 0) { throw "render failed with exit code $($p.ExitCode)" }
           if ((Get-Item "$env:RUNNER_TEMP\demo.wav").Length -lt 1000000) { throw "render too short" }
+          # buses, sends, stereo tools, clip offsets and muted notes
+          $p = Start-Process -FilePath $exe -ArgumentList '--nxw-render', 'tests\features.json', "$env:RUNNER_TEMP\features.wav", '--stems' `
+                 -Wait -PassThru -NoNewWindow -RedirectStandardOutput "$env:RUNNER_TEMP\render2.txt"
+          Get-Content "$env:RUNNER_TEMP\render2.txt"
+          if ($p.ExitCode -ne 0) { throw "features render failed with exit code $($p.ExitCode)" }
+          if ((Get-Content "$env:RUNNER_TEMP\render2.txt" -Raw) -notmatch 'nan 0') { throw "features render produced invalid samples" }
 
       - name: Inno Setup
         shell: pwsh
@@ -182,7 +188,10 @@ jobs:
         if: failure()
         run: grep -E "error:|CMake Error" build-log.txt | head -40 | sed 's/^/::error::/' || true
       - name: Render test
-        run: '"build/NXWStudio_artefacts/Release/NXW Studio" --nxw-render tests/demo.json "$RUNNER_TEMP/demo.wav" --stems'
+        run: |
+          "build/NXWStudio_artefacts/Release/NXW Studio" --nxw-render tests/demo.json "$RUNNER_TEMP/demo.wav" --stems
+          "build/NXWStudio_artefacts/Release/NXW Studio" --nxw-render tests/features.json "$RUNNER_TEMP/features.wav" --stems | tee "$RUNNER_TEMP/features.txt"
+          grep -q "nan 0" "$RUNNER_TEMP/features.txt"
       - name: Plugin self-test
         run: |
           "build/NXWStudio_artefacts/Release/NXW Studio" --nxw-plugin-selftest \

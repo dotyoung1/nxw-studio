@@ -73,6 +73,35 @@
     await until(() => peak() > 0.005, 3000);
     await check(peak() > 0.005, 'sampler channel plays the sound (peak ' + peak().toFixed(3) + ')');
 
+    // Sampler loop, end point, filter and envelope: a 0.4 s slice that loops keeps sounding.
+    stopPreview();
+    await sleep(1500);
+    edit(() => Object.assign(sch.params, { end: 0.05, loop: true, ls: 0.01, ft: 1, fc: 2000, fq: 2, sus: 0.6, dec: 0.1, oneshot: true }));
+    await sleep(600);
+    const lh = playNote(sch, A.ctx.currentTime, 60, 1, null);
+    await sleep(1600);
+    let lp = 0; for (let i = 0; i < 6; i++) { lp = Math.max(lp, peak()); await sleep(100); }
+    await check(lp > 0.003, 'looped sampler slice keeps playing past its end (peak ' + lp.toFixed(3) + ')');
+    lh.release();
+
+    // Mixer buses and sends: the sampler's insert goes into insert 10 and sends to insert 9.
+    const si = sch.mixer;
+    edit(() => { P.mixer[si].route = 10; P.mixer[si].sends = [{ to: 9, lvl: 0.7906 }]; P.mixer[10].width = 0.5; P.mixer[9].phase = true; });
+    await sleep(600);
+    const bh = playNote(sch, A.ctx.currentTime, 60, 1, null);
+    let b10 = 0, b9 = 0;
+    for (let i = 0; i < 20; i++) { await sleep(100); const m = NATIVE.meters; b10 = Math.max(b10, (m[10] || [0])[0] || 0); b9 = Math.max(b9, (m[9] || [0])[0] || 0); }
+    bh.release();
+    await check(b10 > 0.002 && b9 > 0.002, 'routing to a bus and a send both carry sound (bus ' + b10.toFixed(3) + ', send ' + b9.toFixed(3) + ')');
+    edit(() => { delete P.mixer[si].route; delete P.mixer[si].sends; });
+
+    // Capture what was played on the keyboard
+    A.capture = [];
+    for (const k of [60, 64, 67]) { noteOn(k, 0.8); await sleep(120); noteOff(k); await sleep(60); }
+    const np = P.patterns.length;
+    captureNotes();
+    await check(P.patterns.length === np + 1 && curPat().name.startsWith('Captured'), 'capture turns played notes into a pattern');
+
     // Export: WAV written natively, MP3 encoded in the page
     const realCall = NATIVE.call;
     let nextPath = OUT + '/ui-export.wav';

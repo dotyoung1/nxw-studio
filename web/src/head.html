@@ -279,7 +279,7 @@ svg { display: block; }
 .s-btns .m.on { background: var(--alert); color: var(--ink-0); border-color: var(--alert); }
 .s-btns .s.on { background: var(--amber); color: var(--ink-0); border-color: var(--amber); }
 .s-src { font-size: 9px; color: var(--text-faint); width: 100%; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-stretch: 80%; min-height: 12px; }
-.mx-side { width: 290px; flex: none; border-left: 1px solid var(--rule); display: flex; flex-direction: column; min-height: 0; background: var(--ink-1); }
+.mx-side { width: 290px; flex: none; border-left: 1px solid var(--rule); display: flex; flex-direction: column; min-height: 0; background: var(--ink-1); overflow-y: auto; }
 .mx-side h3 { margin: 0; padding: 10px 12px 8px; font-size: 12px; font-weight: 600; font-stretch: 88%; display: flex; align-items: center; gap: 8px; }
 .mx-side h3 small { color: var(--text-faint); font-weight: 500; font-family: var(--font-mono); font-size: 9px; }
 .slots { padding: 0 8px; display: flex; flex-direction: column; gap: 3px; }
@@ -293,7 +293,7 @@ svg { display: block; }
 .slot .pw.off { color: var(--ink-5); }
 .slot .dd { width: 20px; height: 20px; border: 0; background: none; color: var(--text-faint); border-radius: 3px; padding: 0; display: grid; place-items: center; }
 .slot .dd:hover { background: var(--ink-4); color: var(--text); }
-.fxp { flex: 1; overflow-y: auto; padding: 10px 12px 14px; border-top: 1px solid var(--rule); margin-top: 10px; }
+.fxp { flex: 1 0 auto; min-height: 150px; overflow-y: auto; padding: 10px 12px 14px; border-top: 1px solid var(--rule); margin-top: 10px; }
 .fxp h4 { margin: 0 0 10px; font-size: 11px; font-weight: 600; letter-spacing: .02em; color: var(--copper); display: flex; justify-content: space-between; align-items: center; }
 .fxp h4 span { color: var(--text-faint); font-family: var(--font-mono); font-size: 9px; font-weight: 500; }
 .kgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 12px 6px; justify-items: center; }
@@ -427,6 +427,39 @@ kbd { font: 500 10px var(--font-mono); background: var(--ink-0); border: 1px sol
   .chname { width: 104px; }
   .rrow { padding-left: 6px; gap: 5px; }
 }
+/* tap tempo */
+.tapbtn { height: 40px; width: 38px; flex: none; border: 1px solid var(--rule); border-radius: 5px; background: var(--lcd); color: var(--text-dim); font: 700 9px/1 var(--font-ui); letter-spacing: .14em; padding: 0; margin-left: -6px; }
+.tapbtn:hover { color: var(--verdigris); border-color: var(--verdigris-deep); }
+.tapbtn.hit { color: var(--ink-0); background: var(--verdigris); }
+@media (max-width: 860px) { .tapbtn { display: none; } }
+/* forms in dialogs (note properties, chord progression, euclidean) */
+.form { display: flex; flex-direction: column; gap: 8px; }
+.frow { display: flex; align-items: center; gap: 10px; color: var(--text); }
+.frow > span:first-child { width: 150px; flex: none; color: var(--text-dim); }
+.frow small { color: var(--text-faint); }
+.frow input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--verdigris); margin: 0; }
+.num { width: 86px; height: 28px; background: var(--ink-0); border: 1px solid var(--rule-hi); border-radius: 5px; color: var(--text); font: 500 12px var(--font-mono); padding: 0 8px; }
+.num:focus-visible { outline: 2px solid var(--verdigris); outline-offset: 1px; }
+.dlg-note { color: var(--text-dim); }
+.eu-prev { display: flex; flex-wrap: wrap; gap: 3px; padding: 6px 0 2px; }
+.eu-prev i { width: 14px; height: 18px; border-radius: 3px; background: var(--ink-4); }
+.eu-prev i.on { background: var(--verdigris); }
+/* piano roll chord label */
+.chord-lbl { font: 600 11px var(--font-mono); color: var(--verdigris); letter-spacing: 0; min-width: 3ch; }
+/* mixer: routing tab, send rows, bypass */
+.mx-side h3 .mx-tabs { margin-left: auto; }
+.mx-tabs button { padding: 0 9px; }
+.mx-fxbar { display: flex; gap: 6px; padding: 0 8px 8px; align-items: center; }
+.mx-byp.on { color: var(--alert); }
+.slots.bypassed .slot:not(.empty) { opacity: .45; }
+.mx-route .frow > span:first-child { width: 64px; }
+.mx-route select { max-width: 100%; }
+.mx-sends { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.mx-send { display: flex; align-items: center; gap: 8px; background: var(--ink-0); border: 1px solid var(--rule); border-radius: 5px; padding: 3px 4px 3px 8px; }
+.mx-send .nm { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11.5px; }
+.s-rt { font: 600 9px var(--font-mono); color: var(--copper); white-space: nowrap; }
+/* browser favourites */
+.br-row .nm .fav { color: var(--amber); margin-left: 5px; vertical-align: -1px; display: inline-flex; }
 /* desktop app: plugin rows and panels */
 .br-row.k-act .nm { color: var(--verdigris); }
 .plug-panel { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
@@ -465,6 +498,7 @@ kbd { font: 500 10px var(--font-mono); background: var(--ink-0); border: 1px sol
       <button class="tbtn extra" id="bType" data-hint="Typing keyboard to piano · Z-M and Q-P rows play the selected channel" aria-label="Typing keyboard"></button>
     </div>
     <div class="lcd drag" id="tempo" data-hint="Tempo · drag up/down, scroll, or double-click to type"><span class="lcd-v" id="tempoV">128.000</span><span class="lcd-l">Tempo BPM</span></div>
+    <button class="tapbtn" id="bTap" data-hint="Tap tempo · click four or more times in time with the beat" aria-label="Tap tempo">TAP</button>
     <div class="lcd" id="timeLcd" data-hint="Song position · click to switch bars and minutes"><span class="lcd-v" id="timeV">1:1:1</span><span class="lcd-l" id="timeL">Bar:beat:step</span></div>
     <div class="patsel" id="patsel">
       <button id="patPrev" data-hint="Previous pattern" aria-label="Previous pattern"></button>
