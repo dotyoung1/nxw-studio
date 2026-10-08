@@ -466,17 +466,32 @@ void SamplerInstrument::noteOn (int64 when, int key, float vel, double durSample
     v.c.held = durSamples < 0;
     v.data = sample;
     v.reverse = params.rev && sample->hasReversed.load();
-    v.oneshot = params.oneshot;
     v.att = juce::jmax (0.0005, params.att);
     v.rel = juce::jmax (0.005, params.rel);
     v.rate = std::pow (2.0, (key - 60 + params.pitch) / 12.0) * (sample->sampleRate / sr);
     const int len = sample->buffer.getNumSamples();
-    v.pos = dsp::clampv (params.start, 0.0, 0.95) * len;
-    const double peak = vel * params.gain;
+    double st, en, ls;
+    params.span (st, en, ls);
+    v.pos = st * len;
+    v.endPos = juce::jmin ((double) len - 1, en * len);
+    v.loopFrom = ls * len;
+    v.loop = params.loop && v.endPos - v.loopFrom > 2;
+    v.oneshot = params.oneshot && ! v.loop;      // a looping sound plays until its note ends
+    v.filtered = params.filter > 0;
+    if (v.filtered)
+    {
+        static const dsp::Biquad::Type types[] = { dsp::Biquad::Lowpass, dsp::Biquad::Highpass, dsp::Biquad::Bandpass };
+        v.filter.setup (types[juce::jlimit (1, 3, params.filter) - 1], sr);
+        v.filter.reset();
+        v.filter.set (params.cutoff, params.reso);
+    }
+    const double peak = vel * params.gain * (params.normalize ? (double) sample->normGain : 1.0);
     v.g.reset (0);
     v.g.set (0, 0);
     v.g.linearTo (peak, v.att * sr);
-    v.c.stopAt = (len - 1 - v.pos) / juce::jmax (1.0e-6, v.rate);
+    if (params.sus < 0.999)
+        v.g.targetAt (peak * params.sus, v.att * sr, juce::jmax (0.003, params.dec / 3.0) * sr);
+    v.c.stopAt = v.loop ? 1.0e18 : (v.endPos - v.pos) / juce::jmax (1.0e-6, v.rate);
     if (durSamples >= 0) release (v, durSamples);
 }
 
@@ -521,16 +536,20 @@ bool SamplerInstrument::render (float* L, float* R, int64 blockStart, int n)
         const float* d0 = buf.getReadPointer (0);
         const float* d1 = stereo ? buf.getReadPointer (1) : d0;
 
+        const double span = v.endPos - v.loopFrom;
         for (int i = i0; i < n; ++i)
         {
-            if (c.localT >= c.stopAt || v.pos >= len - 1) { c.active = false; break; }
+            if (c.localT >= c.stopAt || v.pos >= len - 1 || (! v.loop && v.pos >= v.endPos)) { c.active = false; break; }
             const float g = (float) (v.g.next() * c.out.next());
-            const float l = hermite (d0, len, v.pos) * g;
-            const float r = stereo ? hermite (d1, len, v.pos) * g : l;
-            L[i] += l; R[i] += r;
+            float l = hermite (d0, len, v.pos);
+            float r = stereo ? hermite (d1, len, v.pos) : l;
+            if (v.filtered) { l = v.filter.process (l, 0); r = stereo ? v.filter.process (r, 1) : l; }
+            L[i] += l * g; R[i] += r * g;
             v.pos += v.rate;
+            if (v.loop && v.pos >= v.endPos) v.pos -= span * std::ceil ((v.pos - v.endPos + 1.0e-9) / span);
             c.localT += 1;
         }
+        if (v.filtered) v.filter.sanitise();
         if (! c.active) v.data.reset();
     }
     return anyStereo;

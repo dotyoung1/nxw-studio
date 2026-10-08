@@ -58,8 +58,18 @@ struct SynthParams
 
 struct SamplerParams
 {
-    double pitch = 0, start = 0, att = 0.002, rel = 0.12, gain = 0.8;
-    bool rev = false, oneshot = true;
+    double pitch = 0, start = 0, end = 1, att = 0.002, dec = 0.3, sus = 1, rel = 0.12, gain = 0.8;
+    double loopStart = 0, cutoff = 18000, reso = 0.8;
+    int filter = 0;                 // 0 off, 1 low-pass, 2 high-pass, 3 band-pass
+    bool rev = false, oneshot = true, loop = false, normalize = false;
+
+    /** Start, end and loop start as the interface's samplerSpan() clamps them. */
+    void span (double& st, double& en, double& ls) const
+    {
+        st = juce::jlimit (0.0, 0.95, start);
+        en = juce::jlimit (juce::jmin (1.0, st + 0.01), 1.0, end);
+        ls = juce::jlimit (0.0, en - 0.01, loopStart);
+    }
 };
 
 /** A reference to a plugin, as stored in the project. */
@@ -77,7 +87,7 @@ struct ChannelModel
     juce::String id, name;
     juce::uint64 hash = 0;
     ChType type = ChType::Unknown;
-    double vol = 0.78, pan = 0;
+    double vol = 0.78, pan = 0, swing = 1;
     bool mute = false;
     int mixer = 0, root = 60;
     bool cut = false;
@@ -120,7 +130,7 @@ struct PatternModel
 
 struct ClipModel
 {
-    int pattern = -1, track = 0, start = 0, len = 16;
+    int pattern = -1, track = 0, start = 0, len = 16, off = 0;
 };
 
 struct FxModel
@@ -139,9 +149,22 @@ struct FxModel
 
 struct InsertModel
 {
-    double vol = 0.7906, pan = 0;
-    bool mute = false, solo = false;
+    struct Send { int to = 0; double level = 0.7906; };
+    double vol = 0.7906, pan = 0, width = 1;
+    bool mute = false, solo = false, phase = false, swap = false, fxOff = false;
+    int route = 0;                  // 0 = master, else another insert (validated: no loops)
+    std::vector<Send> sends;        // post-fader sends (validated)
+    bool active = true;             // after mute and solo
     std::vector<FxModel> fx;
+
+    /** Stereo tool gains (ll, rl, lr, rr), as stereoMatrix() in the interface. */
+    void stereoMatrix (double& ll, double& rl, double& lr, double& rr) const
+    {
+        const double w = juce::jlimit (0.0, 2.0, width), p = phase ? -1.0 : 1.0;
+        const double a = (1 + w) / 2 * p, b = (1 - w) / 2 * p;
+        if (swap) { ll = b; rl = a; lr = a; rr = b; }
+        else      { ll = a; rl = b; lr = b; rr = a; }
+    }
 };
 
 struct Model
@@ -154,6 +177,7 @@ struct Model
     bool hasLoop = false;
     int loopA = 0, loopB = 0, songEnd = 64;
     std::vector<InsertModel> mixer;     // kNumInserts + 1
+    std::vector<int> mixOrder;          // inserts 1..kNumInserts, each before the inserts it feeds
 
     // interface state the engine needs
     int currentPattern = 0;
@@ -172,6 +196,7 @@ struct Model
     static std::shared_ptr<const Model> fromJson (const juce::var& project);
     static ChannelModel channelFromJson (const juce::var& ch);
     static PluginRef pluginFromJson (const juce::var& v);
+    static void buildMixGraph (Model& m);
 };
 
 } // namespace nxw

@@ -247,6 +247,10 @@ function addSampleChannel(id, quiet) {
 /* Files dropped or picked: up to 16 loose sounds become sampler channels; bigger drops just go into the library. */
 async function handleFiles(files, addAsChannels = true) {
   files = [...files];
+  const mids = files.filter(f => /\.midi?$/i.test(f.name));
+  for (const f of mids) await importMidiFile(f);
+  files = files.filter(f => !mids.includes(f));
+  if (mids.length && !files.length) return;
   const items = files.filter(f => AUDIO_EXT.test(f.name)).map(f => ({ file: f, name: f.name, pack: 'Imported', path: '' }));
   const zips = files.filter(f => /\.zip$/i.test(f.name));
   let ids = [];

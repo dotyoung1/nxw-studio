@@ -1,6 +1,7 @@
 /* ================================================================
    NXW STUDIO · piano roll
    ================================================================ */
+let PR_CLIP = null;     // piano-roll clipboard: notes with times relative to the first one
 UI.pr = {
   KW: 62, RH: 24, sel: new Set(), dirty: true, drag: null, marq: null, velMode: 'vel', kbdKey: null, kbdHd: null, lastVel: 0.78, centeredFor: null,
   init() {
@@ -14,20 +15,25 @@ UI.pr = {
     this.toolSeg = toolSeg;
     this.snapSel = h('select', { class: 'sel-box', id: 'prSnap', 'aria-label': 'Snap', 'data-hint': 'Snap · grid that notes lock to (hold Alt while dragging to ignore it)' }, SNAPS.map(s => h('option', { value: s.v }, s.label)));
     this.snapSel.onchange = () => { S.prSnap = +this.snapSel.value; scheduleSave(); };
-    this.chordSel = h('select', { class: 'sel-box', id: 'prChord', 'aria-label': 'Chord stamp', 'data-hint': 'Chord stamp · new notes are placed as this chord' }, Object.keys(CHORDS).map(c => h('option', { value: c }, c)));
+    this.chordSel = h('select', { class: 'sel-box', id: 'prChord', 'aria-label': 'Chord stamp', 'data-hint': 'Chord stamp · new notes are placed as this chord (Scale chords follow the key)' }, [...Object.keys(CHORDS), 'Scale triad', 'Scale 7th'].map(c => h('option', { value: c }, c)));
     this.chordSel.onchange = () => { S.chord = this.chordSel.value; scheduleSave(); };
     this.rootSel = h('select', { class: 'sel-box', id: 'prRoot', 'aria-label': 'Scale root', 'data-hint': 'Scale root' }, NOTE_NAMES.map((n, i) => h('option', { value: i }, n)));
     this.rootSel.onchange = () => { S.scaleRoot = +this.rootSel.value; scheduleSave(); this.dirty = true; };
     this.scaleSel = h('select', { class: 'sel-box', id: 'prScale', 'aria-label': 'Scale', 'data-hint': 'Scale guide · out-of-scale rows are shaded' }, Object.keys(SCALES).map(s => h('option', { value: s }, s === 'Off' ? 'No scale' : s)));
     this.scaleSel.onchange = () => { S.scale = this.scaleSel.value; scheduleSave(); this.dirty = true; };
+    this.lockBtn = h('button', { class: 'btn ghost', 'aria-label': 'Lock to scale', 'data-hint': 'Lock to scale · drawn and moved notes stay on the scale', html: icon('magnet', 14), onclick: () => { S.scaleLock = !S.scaleLock; scheduleSave(); this.render(); hint(S.scaleLock ? 'Notes lock to ' + NOTE_NAMES[S.scaleRoot] + ' ' + S.scale : 'Scale lock off'); } });
     this.ghostBtn = h('button', { class: 'btn', 'data-hint': 'Ghost notes · show the other channels of this pattern', html: icon('ghost', 14) + '<span>Ghosts</span>', onclick: () => { S.ghost = !S.ghost; scheduleSave(); this.render(); } });
-    const qBtn = h('button', { class: 'btn', 'data-hint': 'Quantize · snap note starts (selected, or all) to the grid', html: icon('quant', 14) + '<span>Quantize</span>', onclick: () => this.quantize() });
+    const toolsBtn = h('button', { class: 'btn', 'data-hint': 'Tools · quantize, legato, chop, glue, arpeggiate, strum, humanize, select, MIDI files', html: icon('tools', 14) + '<span>Tools</span>' });
+    toolsBtn.onclick = () => menuAt(toolsBtn, this.toolsMenu());
+    const progBtn = h('button', { class: 'btn', 'data-hint': 'Chord progression · write a progression in the current key', html: icon('chords', 14) + '<span>Chords</span>', onclick: () => this.progressionDialog() });
+    const capBtn = h('button', { class: 'btn', 'data-hint': 'Capture · turn what you just played on the keyboard into a pattern, even without recording', html: icon('capture', 14) + '<span>Capture</span>', onclick: () => captureNotes() });
+    this.chordLbl = h('span', { class: 'lbl chord-lbl', 'aria-live': 'polite', 'data-hint': 'Chord of the selected notes' });
     const zo = h('button', { class: 'btn ghost', 'aria-label': 'Zoom out', 'data-hint': 'Zoom out (Ctrl+scroll)', html: icon('zout', 15), onclick: () => this.zoom(1 / 1.25) });
     const zi = h('button', { class: 'btn ghost', 'aria-label': 'Zoom in', 'data-hint': 'Zoom in (Ctrl+scroll)', html: icon('zin', 15), onclick: () => this.zoom(1.25) });
     this.chSel = h('select', { class: 'sel-box', id: 'prCh', 'aria-label': 'Channel', 'data-hint': 'Channel being edited' });
     this.chSel.onchange = () => { S.ch = this.chSel.value; this.sel.clear(); renderAll(); requestAnimationFrame(() => this.centerOnNotes()); };
     const tb = h('div', { class: 'tb' }, toolSeg, h('span', { class: 'div' }), h('span', { class: 'lbl', html: icon('magnet', 13) }), this.snapSel, this.chordSel,
-      h('span', { class: 'div' }), this.rootSel, this.scaleSel, h('span', { class: 'div' }), this.ghostBtn, qBtn, zo, zi, h('span', { style: { flex: '1' } }), this.chSel);
+      h('span', { class: 'div' }), this.rootSel, this.scaleSel, this.lockBtn, h('span', { class: 'div' }), toolsBtn, progBtn, capBtn, this.ghostBtn, zo, zi, this.chordLbl, h('span', { style: { flex: '1' } }), this.chSel);
     this.scroller = h('div', { class: 'scroller' });
     this.sizer = h('div', { class: 'sizer' });
     this.cv = h('canvas', { 'aria-label': 'Piano roll note grid' });
@@ -45,6 +51,9 @@ UI.pr = {
     this.cv.addEventListener('contextmenu', e => e.preventDefault());
     this.vcv.addEventListener('pointerdown', e => this.velDown(e));
     this.vcv.addEventListener('contextmenu', e => e.preventDefault());
+    // MIDI files dropped on the piano roll are imported.
+    w.body.addEventListener('dragover', e => { if ([...e.dataTransfer.types].includes('Files')) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
+    w.body.addEventListener('drop', e => { const f = [...(e.dataTransfer.files || [])].find(x => /\.midi?$/i.test(x.name)); if (f) { e.preventDefault(); e.stopPropagation(); importMidiFile(f); } });
   },
   zoom(f, px) {
     const sc = this.scroller, old = S.prZoomX, nz = clamp(old * f, 5, 90);
@@ -73,6 +82,7 @@ UI.pr = {
     for (const b of this.toolSeg.children) b.classList.toggle('on', b.dataset.k === S.prTool);
     this.snapSel.value = String(S.prSnap); this.chordSel.value = S.chord; this.rootSel.value = String(S.scaleRoot); this.scaleSel.value = S.scale;
     this.ghostBtn.classList.toggle('on', S.ghost);
+    this.lockBtn.classList.toggle('on', !!S.scaleLock && !!SCALES[S.scale]); this.lockBtn.disabled = !SCALES[S.scale];
     const chKey = P.channels.map(c => c.id + c.name).join('|');
     if (chKey !== this._chKey) { this._chKey = chKey; this.chSel.textContent = ''; for (const c of P.channels) this.chSel.append(h('option', { value: c.id }, c.name)); }
     if (ch) this.chSel.value = ch.id;
@@ -134,6 +144,8 @@ UI.pr = {
     let tool = S.prTool;
     if (e.button === 2) tool = 'erase'; else if (e.ctrlKey || e.metaKey) tool = 'select';
     const h0 = this.hit(x, y);
+    this.cursorT = Math.max(0, snapFloor(this.stepAt(x), S.prSnap));
+    if (h0 && e.button === 0 && e.detail === 2 && !(h0.n === this.lastCreated && performance.now() - this.lastCreatedAt < 700)) { finish(); this.drag = null; this.propsDialog(h0.n); return; }
     if (tool === 'erase') {
       Hist.push();
       const er = (xx, yy) => { const hh = this.hit(xx, yy); if (hh) { ns.splice(ns.indexOf(hh.n), 1); this.sel.delete(hh.n); VER++; this.dirty = true; } };
@@ -174,10 +186,12 @@ UI.pr = {
     }
     // draw a new note (or chord)
     Hist.push();
-    const t = Math.max(0, snapFloor(this.stepAt(x), S.prSnap)), k = clamp(this.keyAt(y), KEY_LO, KEY_HI);
+    const t = Math.max(0, snapFloor(this.stepAt(x), S.prSnap)), k0 = clamp(this.keyAt(y), KEY_LO, KEY_HI);
+    const k = this.locked() ? clamp(snapToScale(k0), KEY_LO, KEY_HI) : k0;
     const len = S.prLastLen || Math.max(S.prSnap || 1, 1);
-    const created = CHORDS[S.chord].map(iv => ({ t, len, key: clamp(k + iv, KEY_LO, KEY_HI), vel: this.lastVel || 0.78, chance: 1 }));
-    ns.push(...created); this.sel = new Set(created);
+    const keys = S.chord === 'Scale triad' ? scaleChordKeys(k, 3) : S.chord === 'Scale 7th' ? scaleChordKeys(k, 4) : (CHORDS[S.chord] || [0]).map(iv => k + iv);
+    const created = keys.map(kk => ({ t, len, key: clamp(kk, KEY_LO, KEY_HI), vel: this.lastVel || 0.78, chance: 1 }));
+    ns.push(...created); this.sel = new Set(created); this.lastCreated = created[0]; this.lastCreatedAt = performance.now();
     const c = audio(); if (c) created.forEach(n => playNote(ch, c.currentTime + 0.005, n.key, n.vel, 0.25));
     VER++;
     this.startDrag('move', created[0], x, y);
@@ -196,8 +210,8 @@ UI.pr = {
       const ds = this.stepAt(p.x) - st0, sn = ev.altKey ? 0 : S.prSnap;
       if (mode === 'move') {
         let dt = snapRound(a.t + ds, sn) - a.t; dt = Math.max(dt, -minT);
-        const dk = clamp(Math.round((y - p.y) / S.prZoomY), KEY_LO - minK, KEY_HI - maxK);
-        for (const [n, o] of orig) { n.t = Math.max(0, o.t + dt); n.key = o.key + dk; }
+        const dk = clamp(Math.round((y - p.y) / S.prZoomY), KEY_LO - minK, KEY_HI - maxK), lock = this.locked() && dk !== 0;
+        for (const [n, o] of orig) { n.t = Math.max(0, o.t + dt); n.key = lock ? clamp(snapToScale(o.key + dk), KEY_LO, KEY_HI) : o.key + dk; }
         if (dk !== lastDk) { lastDk = dk; this.audition(anchor.key, 0.18); }
         hint(noteName(anchor.key) + ' · bar ' + (Math.floor(anchor.t / 16) + 1) + ', step ' + (Math.floor(anchor.t % 16) + 1));
       } else {
@@ -213,28 +227,184 @@ UI.pr = {
       growPattern(curPat()); refresh();
     };
   },
+  locked() { return !!S.scaleLock && !!SCALES[S.scale]; },
   deleteSel() { if (!this.sel.size) return; edit(() => { const ns = this.notes(); for (const n of this.sel) { const i = ns.indexOf(n); if (i >= 0) ns.splice(i, 1); } this.sel.clear(); }); },
-  quantize() {
+  quantize(ends) {
     const ns = this.notes(); if (!ns.length) return;
     const sn = S.prSnap || 1, tgt = this.sel.size ? [...this.sel] : ns;
-    edit(() => { for (const n of tgt) n.t = Math.max(0, snapRound(n.t, sn)); });
+    edit(() => NT.quantize(tgt, sn, ends));
     toast('Quantized ' + tgt.length + ' notes to ' + (SNAPS.find(s => s.v === sn) || { label: 'grid' }).label.toLowerCase());
   },
+  /* Runs a note tool on the selected notes (or every note of the channel in this pattern), as one undo step. */
+  tool(label, fn) {
+    const ch = selCh(); if (!ch) { toast('Select a channel first'); return; }
+    const all = this.notes(), hadSel = this.sel.size > 0, tgt = hadSel ? [...this.sel] : all.slice();
+    if (!tgt.length) { toast('No notes to change'); return; }
+    let made;
+    edit(() => { made = fn(tgt, all); growPattern(curPat()); });
+    const keep = [...this.sel].filter(n => all.includes(n)).concat(Array.isArray(made) ? made : []);
+    this.sel = new Set(hadSel ? keep : []); this.dirty = true;
+    hint(label + ' · ' + tgt.length + (tgt.length === 1 ? ' note' : ' notes'));
+  },
+  toolsMenu() {
+    const sn = S.prSnap || 1, has = this.notes().length > 0, ch = selCh();
+    const T = (label, key, fn, hn) => ({ label, key, hint: hn, disabled: !has, action: () => this.tool(label, fn) });
+    return [
+      { head: this.sel.size ? 'Selected notes (' + this.sel.size + ')' : 'All notes of ' + (ch ? ch.name : 'this channel') },
+      T('Quantize starts', 'Ctrl+Q', ns => NT.quantize(ns, sn, false)),
+      T('Quantize starts and lengths', '', ns => NT.quantize(ns, sn, true)),
+      T('Legato', 'Ctrl+L', ns => NT.legato(ns), 'Each note lasts until the next one starts'),
+      T('Glue', 'Ctrl+G', (ns, all) => { NT.glue(ns, all); }, 'Join touching notes of the same pitch'),
+      T('Chop to grid', 'Ctrl+U', (ns, all) => NT.chop(ns, all, sn), 'Split long notes at every grid step'),
+      T('Arpeggiate up', 'Alt+A', (ns, all) => NT.arp(ns, all, sn, 'up'), 'Chords become arpeggios at the snap rate'),
+      T('Arpeggiate down', '', (ns, all) => NT.arp(ns, all, sn, 'down')),
+      T('Arpeggiate up and down', '', (ns, all) => NT.arp(ns, all, sn, 'updown')),
+      T('Arpeggiate random', '', (ns, all) => NT.arp(ns, all, sn, 'random')),
+      T('Strum up', 'Alt+S', ns => NT.strum(ns, 0.33, false), 'Spread chord notes like a guitar strum'),
+      T('Strum down', '', ns => NT.strum(ns, 0.33, true)),
+      T('Flam', 'Alt+F', (ns, all) => NT.flam(ns, all), 'A quieter grace note just before each note'),
+      T('Limit to scale', 'Alt+K', ns => NT.toScale(ns), 'Move notes onto ' + NOTE_NAMES[S.scaleRoot] + ' ' + (SCALES[S.scale] ? S.scale : 'Major')),
+      T('Flip vertically', 'Alt+Y', ns => NT.flipV(ns)),
+      T('Reverse in time', '', ns => NT.reverse(ns)),
+      T('Humanize timing and velocity', 'Alt+R', ns => NT.humanize(ns, 0.12, 0.12)),
+      { head: 'Velocity' },
+      T('Ramp up', '', ns => NT.velocity(ns, 'up')), T('Ramp down', '', ns => NT.velocity(ns, 'down')),
+      T('Compress (even out)', 'Alt+X', ns => NT.velocity(ns, 'compress')), T('Expand (more contrast)', '', ns => NT.velocity(ns, 'expand')),
+      T('Sine wave (LFO)', 'Alt+O', ns => NT.velocity(ns, 'sine')), T('All 100%', '', ns => NT.velocity(ns, 'full')),
+      { head: 'Pitch and time' },
+      T('Shuffle pitches', '', ns => NT.pitches(ns, 'shuffle'), 'Same rhythm, pitches in a new order'),
+      T('Retrograde pitches', '', ns => NT.pitches(ns, 'retro'), 'Same rhythm, pitches backwards'),
+      T('Rotate pitches', '', ns => NT.pitches(ns, 'rotate')),
+      T('Invert chords', 'Alt+I', ns => NT.invert(ns), 'Lowest note of each chord up an octave'),
+      T('Double length (half speed)', '', ns => NT.stretch(ns, 2)), T('Half length (double speed)', '', ns => NT.stretch(ns, 0.5)),
+      T('Remove duplicate notes', '', (ns, all) => { NT.dedupe(ns, all); }),
+      T(this.sel.size && [...this.sel].every(n => n.mute) ? 'Unmute notes' : 'Mute or unmute notes', 'Ctrl+M', ns => this.muteNotes(ns)),
+      { head: 'Select' },
+      { label: 'All', key: 'Ctrl+A', action: () => { this.sel = new Set(this.notes()); this.dirty = true; } },
+      { label: 'None', key: 'Esc', action: () => { this.sel.clear(); this.dirty = true; } },
+      { label: 'Invert selection', action: () => { this.sel = new Set(this.notes().filter(n => !this.sel.has(n))); this.dirty = true; } },
+      { label: 'Same pitches as selected', disabled: !this.sel.size, action: () => { const ks = new Set([...this.sel].map(n => n.key)); this.sel = new Set(this.notes().filter(n => ks.has(n.key))); this.dirty = true; } },
+      { label: 'Random half', action: () => { this.sel = new Set(this.notes().filter(() => Math.random() < 0.5)); this.dirty = true; } },
+      { label: 'Muted notes', action: () => { this.sel = new Set(this.notes().filter(n => n.mute)); this.dirty = true; } },
+      { label: 'Notes on the beat', action: () => { this.sel = new Set(this.notes().filter(n => Math.abs(n.t / 4 - Math.round(n.t / 4)) < 1e-3)); this.dirty = true; } },
+      { label: 'Notes off the beat', action: () => { this.sel = new Set(this.notes().filter(n => Math.abs(n.t / 4 - Math.round(n.t / 4)) >= 1e-3)); this.dirty = true; } },
+      { head: 'Notes' },
+      { label: 'Cut', key: 'Ctrl+X', disabled: !this.sel.size, action: () => this.copy(true) },
+      { label: 'Copy', key: 'Ctrl+C', disabled: !this.sel.size, action: () => this.copy(false) },
+      { label: 'Paste', key: 'Ctrl+V', disabled: !PR_CLIP, action: () => this.paste() },
+      { label: 'Duplicate', key: 'Ctrl+B', disabled: !this.sel.size, action: () => this.duplicate() },
+      { head: 'Chords and MIDI' },
+      { label: 'Chord progression…', icon: 'chords', action: () => this.progressionDialog() },
+      { label: 'Capture what I just played', icon: 'capture', action: () => captureNotes() },
+      { label: 'Import MIDI file…', action: () => pickMidiFile() },
+      { label: 'Export pattern as MIDI file', action: () => exportPatternMidi(curPat()) },
+    ];
+  },
+  muteNotes(ns) { const to = !ns.every(n => n.mute); for (const n of ns) { if (to) n.mute = true; else delete n.mute; } },
+  copy(cut) {
+    if (!this.sel.size) return;
+    const s = [...this.sel], t0 = Math.min(...s.map(n => n.t));
+    PR_CLIP = s.map(n => Object.assign({}, n, { t: n.t - t0 }));
+    if (cut) this.deleteSel();
+    hint((cut ? 'Cut ' : 'Copied ') + s.length + ' notes · click where they should go, then Ctrl+V');
+  },
+  paste() {
+    const ch = selCh(); if (!ch || !PR_CLIP) return;
+    const at = this.cursorT != null ? this.cursorT : 0;
+    let made;
+    edit(() => { made = PR_CLIP.map(n => Object.assign({}, n, { t: n.t + at })); patNotes(curPat(), ch).push(...made); growPattern(curPat()); });
+    this.sel = new Set(made);
+    const end = Math.max(...made.map(n => n.t + n.len)), sn = S.prSnap || 1;
+    this.cursorT = Math.ceil(end / sn - 1e-6) * sn;
+    hint('Pasted ' + made.length + ' notes · Ctrl+V again pastes after them');
+  },
+  duplicate() {
+    const ns = this.notes(); if (!this.sel.size) return;
+    const s = [...this.sel], t0 = Math.min(...s.map(n => n.t)), t1 = Math.max(...s.map(n => n.t + n.len)), sn = S.prSnap || 1, off = Math.ceil((t1 - t0) / sn - 1e-6) * sn;
+    edit(() => { const c = s.map(n => Object.assign({}, n, { t: n.t + off })); ns.push(...c); this.sel = new Set(c); growPattern(curPat()); });
+  },
+  /* Note properties (double-click a note). */
+  propsDialog(n) {
+    const ch = selCh(); if (!ch) return;
+    const num = (v, min, max, step) => h('input', { type: 'number', class: 'num', value: String(v), min, max, step });
+    const keySel = h('select', { class: 'sel-box' }); for (let k = KEY_HI; k >= KEY_LO; k--) keySel.append(h('option', { value: k }, noteName(k)));
+    keySel.value = String(n.key);
+    const tIn = num(r2(n.t), 0, 1024, 0.25), lIn = num(r2(n.len), 0.05, 1024, 0.25), vIn = num(Math.round(n.vel * 100), 1, 100, 1), cIn = num(Math.round((n.chance ?? 1) * 100), 0, 100, 1);
+    const rSel = h('select', { class: 'sel-box' }, REPS.map(r => h('option', { value: r }, r === 1 ? 'Once' : r + ' times')));
+    rSel.value = String(n.rep > 1 ? n.rep : 1);
+    const mIn = h('input', { type: 'checkbox' }); mIn.checked = !!n.mute;
+    const row = (l, el, sub) => h('label', { class: 'frow' }, h('span', null, l), el, sub ? h('small', null, sub) : null);
+    dialog('Note properties', h('div', { class: 'form' },
+      row('Pitch', keySel), row('Start', tIn, 'steps · 16 per bar'), row('Length', lIn, 'steps'), row('Velocity', vIn, '%'), row('Chance', cIn, '% of the times it plays'),
+      row('Repeat', rSel), row('Muted', mIn)), [
+      { label: 'Cancel' },
+      { label: 'Apply', primary: true, action: () => {
+        const v = (el, d) => { const x = parseFloat(el.value); return isFinite(x) ? x : d; };
+        edit(() => {
+          n.key = clamp(+keySel.value, KEY_LO, KEY_HI); n.t = Math.max(0, v(tIn, n.t)); n.len = Math.max(0.05, v(lIn, n.len));
+          n.vel = clamp(v(vIn, 78) / 100, 0.01, 1); n.chance = clamp(v(cIn, 100) / 100, 0, 1);
+          const rp = +rSel.value; if (rp > 1) n.rep = rp; else delete n.rep;
+          if (mIn.checked) n.mute = true; else delete n.mute;
+          growPattern(curPat());
+        });
+      } }]);
+  },
+  /* Chord progression writer: preset progressions in the current key, with voicing and voice leading. */
+  progressionDialog() {
+    const ch = selCh(); if (!ch) { toast('Select a channel first'); return; }
+    const names = Object.keys(PROGRESSIONS);
+    const progSel = h('select', { class: 'sel-box' }, names.map(n => h('option', { value: n }, n)));
+    progSel.value = S.progLast && PROGRESSIONS[S.progLast] ? S.progLast : names[0];
+    const lenSel = h('select', { class: 'sel-box' }, [[8, '2 beats'], [16, '1 bar'], [32, '2 bars']].map(([v, l]) => h('option', { value: v }, l))); lenSel.value = '16';
+    const octSel = h('select', { class: 'sel-box' }, [2, 3, 4, 5].map(o => h('option', { value: o }, 'Octave ' + o))); octSel.value = '4';
+    const voiceSel = h('select', { class: 'sel-box' }, [['close', 'Close'], ['open', 'Open'], ['spread', 'Spread']].map(([v, l]) => h('option', { value: v }, l)));
+    const cb = (on) => { const c = h('input', { type: 'checkbox' }); c.checked = on; return c; };
+    const sev = cb(false), lead = cb(true), bass = cb(false), repl = cb(false);
+    const keyTxt = NOTE_NAMES[S.scaleRoot] + ' ' + (chordScale() === SCALES.Minor && S.scale !== 'Minor' ? 'Minor' : chordScale() === SCALES.Major && S.scale !== 'Major' ? 'Major' : S.scale);
+    const row = (l, el) => h('label', { class: 'frow' }, h('span', null, l), el);
+    const opts = () => ({ len: +lenSel.value, octave: +octSel.value, voicing: voiceSel.value, sevenths: sev.checked, lead: lead.checked, bass: bass.checked, vel: 0.72 });
+    const preview = () => {
+      const c = audio(); if (!c) return;
+      const ns = buildProgression(PROGRESSIONS[progSel.value], Object.assign(opts(), { len: 8 })), sd = 60 / P.bpm / 4;
+      for (const n of ns) playNote(ch, c.currentTime + 0.05 + n.t * sd, n.key, 0.6, n.len * sd * 0.95);
+    };
+    const dice = () => { progSel.value = names[Math.floor(Math.random() * names.length)]; voiceSel.value = ['close', 'open', 'spread'][Math.floor(Math.random() * 3)]; sev.checked = Math.random() < 0.4; preview(); };
+    dialog('Chord progression', h('div', { class: 'form' },
+      h('p', { class: 'dlg-note' }, 'Written in ' + keyTxt + ' (change the key with the scale menus in the piano roll) onto ' + ch.name + '.'),
+      row('Progression', progSel), row('Chord length', lenSel), row('Register', octSel), row('Voicing', voiceSel),
+      row('Seventh chords', sev), row('Smooth voice leading', lead), row('Add bass notes', bass), row('Replace this channel’s notes', repl),
+      h('div', { class: 'krow', style: { gap: '6px', marginTop: '6px' } },
+        h('button', { class: 'btn', html: icon('play', 11) + '<span>Preview</span>', onclick: preview }),
+        h('button', { class: 'btn', 'data-hint': 'Pick a random progression and voicing', onclick: dice }, 'Surprise me'))), [
+      { label: 'Cancel' },
+      { label: 'Write chords', primary: true, action: () => {
+        S.progLast = progSel.value; scheduleSave();
+        const at = repl.checked ? 0 : snapFloor(this.cursorT || 0, 16);
+        const made = buildProgression(PROGRESSIONS[progSel.value], opts()).map(n => Object.assign(n, { t: n.t + at }));
+        edit(() => { const pat = curPat(); if (repl.checked) pat.notes[ch.id] = []; patNotes(pat, ch).push(...made); growPattern(pat); });
+        this.sel = new Set(made); this.dirty = true; WM.show('pr');
+        toast('Wrote ' + progSel.value.split(' · ')[1] + ' in ' + keyTxt);
+      } }]);
+  },
   key(e) {
-    const mod = e.ctrlKey || e.metaKey, ns = this.notes();
+    const mod = e.ctrlKey || e.metaKey, ns = this.notes(), c = e.code, sn = S.prSnap || 1;
     if (e.key === 'Delete' || e.key === 'Backspace') { if (this.sel.size) { e.preventDefault(); this.deleteSel(); return true; } return false; }
-    if (mod && e.code === 'KeyA') { e.preventDefault(); this.sel = new Set(ns); this.dirty = true; return true; }
+    if (mod && c === 'KeyA') { e.preventDefault(); this.sel = new Set(ns); this.dirty = true; return true; }
     if (e.key === 'Escape' && this.sel.size) { this.sel.clear(); this.dirty = true; return true; }
-    if (mod && e.code === 'KeyD' && this.sel.size) {
-      e.preventDefault();
-      const s = [...this.sel], t0 = Math.min(...s.map(n => n.t)), t1 = Math.max(...s.map(n => n.t + n.len)), sn = S.prSnap || 1, off = Math.ceil((t1 - t0) / sn - 1e-6) * sn;
-      edit(() => { const c = s.map(n => Object.assign({}, n, { t: n.t + off })); ns.push(...c); this.sel = new Set(c); growPattern(curPat()); });
-      return true;
-    }
+    if (mod && (c === 'KeyD' || c === 'KeyB') && this.sel.size) { e.preventDefault(); this.duplicate(); return true; }
+    if (mod && !e.shiftKey && (c === 'KeyC' || c === 'KeyX') && this.sel.size) { e.preventDefault(); this.copy(c === 'KeyX'); return true; }
+    if (mod && !e.shiftKey && c === 'KeyV' && PR_CLIP) { e.preventDefault(); this.paste(); return true; }
+    const tools = mod && !e.altKey ? { KeyQ: ['Quantize', x => NT.quantize(x, sn, false)], KeyL: ['Legato', x => NT.legato(x)], KeyG: ['Glue', (x, all) => { NT.glue(x, all); }], KeyU: ['Chop', (x, all) => NT.chop(x, all, sn)], KeyM: ['Mute', x => this.muteNotes(x)] }
+      : e.altKey && !mod ? { KeyA: ['Arpeggiate', (x, all) => NT.arp(x, all, sn, 'up')], KeyS: ['Strum', x => NT.strum(x, 0.33, false)], KeyF: ['Flam', (x, all) => NT.flam(x, all)], KeyK: ['Limit to scale', x => NT.toScale(x)],
+        KeyY: ['Flip', x => NT.flipV(x)], KeyR: ['Humanize', x => NT.humanize(x, 0.12, 0.12)], KeyX: ['Compress velocity', x => NT.velocity(x, 'compress')], KeyO: ['Velocity LFO', x => NT.velocity(x, 'sine')], KeyI: ['Invert chords', x => NT.invert(x)] } : null;
+    if (tools && tools[c] && !e.shiftKey) { e.preventDefault(); if (ns.length) this.tool(tools[c][0], tools[c][1]); return true; }
     if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && this.sel.size) {
       e.preventDefault(); const d = (e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 12 : 1);
       const s = [...this.sel]; if (s.some(n => n.key + d < KEY_LO || n.key + d > KEY_HI)) return true;
-      edit(() => { for (const n of s) n.key += d; }); this.audition(s[0].key, 0.2); return true;
+      // Locked to the scale, single steps move to the next scale note.
+      const lock = this.locked() && !e.shiftKey;
+      const step = k => { if (!lock) return k + d; let x = k + d; while (!inScale(x) && x > KEY_LO && x < KEY_HI) x += d; return x; };
+      edit(() => { for (const n of s) n.key = clamp(step(n.key), KEY_LO, KEY_HI); }); this.audition(s[0].key, 0.2); return true;
     }
     if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && this.sel.size) {
       e.preventDefault(); const d = (e.key === 'ArrowRight' ? 1 : -1) * (S.prSnap || 1), s = [...this.sel];
@@ -309,10 +479,12 @@ UI.pr = {
         if (x > W || x + w < KW || y > H || y + zy < RH) continue;
         const sel = this.sel.has(n), late = n.t >= pat.len;
         ctx.globalAlpha = late ? 0.4 : 1;
-        ctx.fillStyle = mixHex(ch.color, '#0d1013', (1 - n.vel) * 0.62);
+        ctx.fillStyle = n.mute ? '#2b3238' : mixHex(ch.color, '#0d1013', (1 - n.vel) * 0.62);
         rrect(ctx, x + 0.5, y + 1, w - 1, zy - 2, Math.min(4, zy / 3)); ctx.fill();
-        ctx.lineWidth = sel ? 2 : 1; ctx.strokeStyle = sel ? CSSV.copper : 'rgba(0,0,0,0.45)'; ctx.stroke();
-        if (w > 30 && zy >= 11) { ctx.fillStyle = 'rgba(8,10,12,0.8)'; ctx.fillText(noteName(n.key), x + 5, y + zy / 2 + 0.5); }
+        if (n.mute) ctx.setLineDash([3, 2]);
+        ctx.lineWidth = sel ? 2 : 1; ctx.strokeStyle = sel ? CSSV.copper : n.mute ? hexA(ch.color, 0.7) : 'rgba(0,0,0,0.45)'; ctx.stroke();
+        if (n.mute) ctx.setLineDash([]);
+        if (w > 30 && zy >= 11) { ctx.fillStyle = n.mute ? CSSV['text-faint'] : 'rgba(8,10,12,0.8)'; ctx.fillText(noteName(n.key), x + 5, y + zy / 2 + 0.5); }
         if (n.rep > 1) { ctx.fillStyle = 'rgba(8,10,12,0.55)'; for (let r = 1; r < n.rep; r++) ctx.fillRect(Math.round(x + w * r / n.rep), y + 3, 1, zy - 6); }
         if ((n.chance ?? 1) < 0.999) { ctx.fillStyle = CSSV.copper; ctx.beginPath(); ctx.arc(x + w - 5, y + 5, 2, 0, 7); ctx.fill(); }
         ctx.globalAlpha = 1;
@@ -350,6 +522,11 @@ UI.pr = {
     ctx.fillStyle = CSSV['ink-1']; ctx.fillRect(0, 0, KW, RH);
     ctx.fillStyle = ch ? ch.color : CSSV['text-faint']; ctx.fillRect(8, RH / 2 - 3, 6, 6);
     ctx.fillStyle = CSSV['text-dim']; ctx.font = '600 9px ' + FONT_UI; ctx.fillText(SCALES[S.scale] ? NOTE_NAMES[S.scaleRoot] + ' ' + (S.scale.length > 6 ? S.scale.slice(0, 5) + '.' : S.scale) : 'Chromatic', 18, RH / 2);
+    // Chord of the selection (or of the notes under the edit cursor).
+    let ck = this.sel.size > 1 ? [...this.sel].map(n => n.key) : [];
+    if (!ck.length && this.cursorT != null) ck = ns.filter(n => n.t <= this.cursorT + 1e-6 && n.t + n.len > this.cursorT + 1e-6).map(n => n.key);
+    const cn = ck.length > 1 ? chordName(ck) : '';
+    if (this.chordLbl.textContent !== cn) this.chordLbl.textContent = cn;
     this.drawVel();
   },
   drawVel() {

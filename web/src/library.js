@@ -81,6 +81,12 @@ function peaksOf(buf, N = 400) {
   for (let i = 0; i < N; i++) { let mn = 0, mx = 0; for (let j = i * per, e = Math.min(d0.length, (i + 1) * per); j < e; j++) { const v = d0[j]; if (v < mn) mn = v; if (v > mx) mx = v; } peaks[i * 2] = mn; peaks[i * 2 + 1] = mx; }
   return peaks;
 }
+/* Gain that brings the loudest sample to 0 dBFS (the sampler's Normalize switch; the desktop engine computes the same). */
+function normGainOf(buf) {
+  let pk = 0;
+  for (let c = 0; c < buf.numberOfChannels; c++) { const d = buf.getChannelData(c); for (let j = 0; j < d.length; j++) { const a = Math.abs(d[j]); if (a > pk) pk = a; } }
+  return pk > 1e-5 ? Math.min(64, 1 / pk) : 1;
+}
 function decodeCtx() { return (A.ctx && A.ctx.decodeAudioData ? A.ctx : null) || LIB.dctx || (LIB.dctx = new OfflineAudioContext(2, 1, 48000)); }
 function decodeData(ab) { const c = decodeCtx(); return new Promise((res, rej) => { const pr = c.decodeAudioData(ab, res, rej); if (pr && pr.catch) pr.catch(rej); }); }
 /* Decodes a library sample on first use; later calls share the same promise or the cached buffer. */
@@ -94,7 +100,7 @@ function ensureSample(id) {
     const blob = await libBlob(id); if (!blob) { LIB.missing.add(id); return null; }
     const buf = await decodeData(await blob.arrayBuffer());
     const m = LIB.meta.get(id) || { name: 'Sample' };
-    const s = { id, name: m.name, buf, rev: null, peaks: peaksOf(buf), dur: buf.duration };
+    const s = { id, name: m.name, buf, rev: null, peaks: peaksOf(buf), dur: buf.duration, normGain: normGainOf(buf) };
     A.samples.set(id, s);
     if (m.id && !m.dur) { m.dur = buf.duration; m.sr = buf.sampleRate; m.chans = buf.numberOfChannels; libSaveMeta(m); }
     clearTimeout(LIB.rt); LIB.rt = setTimeout(renderAll, 80);   // channels waiting on this sound update their state

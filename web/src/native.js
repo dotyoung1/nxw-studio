@@ -115,6 +115,8 @@ NATIVE.onTick = t => {
   if (t.playing) A.playMode = t.pat ? 'pat' : 'song';
   const now = performance.now() / 1000;
   for (const id of t.hits || []) A.hits.set(id, now);
+  // Hardware MIDI notes (the engine already played them): recording, capture and the on-screen keys.
+  for (const m of t.midi || []) { if (m[1] > 0) noteOn(m[0], m[1], { ago: m[2] }); else noteOff(m[0], { ago: m[2] }); }
   const sc = t.scope || [];
   for (let i = 0; i < sc.length && i * 4 + 3 < NATIVE.scope.length; i++)
     NATIVE.scope[i * 4] = NATIVE.scope[i * 4 + 1] = NATIVE.scope[i * 4 + 2] = NATIVE.scope[i * 4 + 3] = sc[i];

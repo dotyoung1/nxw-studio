@@ -66,10 +66,26 @@ const SYNTH_PRESETS = {
 const SAMPLER_PARAMS = [
   { k: 'pitch', label: 'Pitch', min: -24, max: 24, def: 0, step: 1, unit: 'st', bipolar: true },
   { k: 'start', label: 'Start', min: 0, max: 0.95, def: 0, unit: '%' },
-  { k: 'att', label: 'Attack', min: 0.001, max: 2, def: 0.002, log: true, unit: 's' },
-  { k: 'rel', label: 'Release', min: 0.01, max: 4, def: 0.12, log: true, unit: 's' },
+  { k: 'end', label: 'End', min: 0.05, max: 1, def: 1, unit: '%' },
   { k: 'gain', label: 'Level', min: 0, max: 1.5, def: 0.8, unit: '%' },
 ];
+const SAMPLER_ENV = [
+  { k: 'att', label: 'Attack', min: 0.001, max: 2, def: 0.002, log: true, unit: 's' },
+  { k: 'dec', label: 'Decay', min: 0.01, max: 4, def: 0.3, log: true, unit: 's' },
+  { k: 'sus', label: 'Sustain', min: 0, max: 1, def: 1, unit: '%' },
+  { k: 'rel', label: 'Release', min: 0.01, max: 4, def: 0.12, log: true, unit: 's' },
+];
+const SAMPLER_LOOP = { k: 'ls', label: 'Loop start', min: 0, max: 0.95, def: 0, unit: '%' };
+const SAMPLER_FILTER = [
+  { k: 'fc', label: 'Cutoff', min: 30, max: 20000, def: 18000, log: true, unit: 'Hz' },
+  { k: 'fq', label: 'Resonance', min: 0.3, max: 18, def: 0.8, log: true, unit: 'q' },
+];
+const SAMPLER_FILTER_TYPES = ['Off', 'Low-pass', 'High-pass', 'Band-pass'];
+/* Start, end and loop start as the sampler uses them (start < end, loop start < end). */
+function samplerSpan(p) {
+  const st = clamp(p.start || 0, 0, 0.95), en = clamp(p.end ?? 1, Math.min(1, st + 0.01), 1);
+  return { st, en, ls: clamp(p.ls || 0, 0, en - 0.01) };
+}
 
 /* --------------------------- mixer effects --------------------------- */
 const DELAY_STEPS = [1, 2, 3, 4, 6, 8];
@@ -157,7 +173,17 @@ class Strip {
     const c = A.ctx; this.i = i;
     this.input = c.createGain(); this.post = c.createGain(); this.pan = c.createStereoPanner();
     this.fader = c.createGain(); this.mute = c.createGain();
-    this.pan.connect(this.fader); this.fader.connect(this.mute); this.post.connect(this.pan);
+    // Stereo tool after the effects: polarity, stereo separation and L/R swap as one 2x2 matrix.
+    this.post.channelCount = 2; this.post.channelCountMode = 'explicit'; this.post.channelInterpretation = 'speakers';
+    this.stSplit = c.createChannelSplitter(2); this.stMerge = c.createChannelMerger(2);
+    this.gLL = c.createGain(); this.gRL = c.createGain(); this.gLR = c.createGain(); this.gRR = c.createGain();
+    this.gRL.gain.value = 0; this.gLR.gain.value = 0;
+    this.stSplit.connect(this.gLL, 0); this.stSplit.connect(this.gLR, 0); this.stSplit.connect(this.gRL, 1); this.stSplit.connect(this.gRR, 1);
+    this.gLL.connect(this.stMerge, 0, 0); this.gRL.connect(this.stMerge, 0, 0); this.gLR.connect(this.stMerge, 0, 1); this.gRR.connect(this.stMerge, 0, 1);
+    this.post.connect(this.stSplit); this.stMerge.connect(this.pan);
+    this.pan.connect(this.fader); this.fader.connect(this.mute);
+    this.out = c.createGain(); this.dest = -1; this.sendNodes = new Map(); this.sendSig = '';
+    if (i > 0) this.mute.connect(this.out);
     this.split = c.createChannelSplitter(2);
     this.anL = c.createAnalyser(); this.anR = c.createAnalyser(); this.anL.fftSize = this.anR.fftSize = 512;
     this.mute.connect(this.split); this.split.connect(this.anL, 0); this.split.connect(this.anR, 1);
@@ -170,19 +196,40 @@ class Strip {
       const pre = c.createGain(), clip = c.createWaveShaper(); pre.gain.value = 0.5; clip.curve = softClipCurve(); clip.oversample = '2x';
       this.mute.connect(lim); lim.connect(A.masterOut); A.masterOut.connect(pre); pre.connect(clip); clip.connect(A.scopeAn); clip.connect(c.destination);
       A.limiter = lim; A.clipOut = clip;
-    } else this.mute.connect(A.strips[0].input);
+    }
     this.disp = [0, 0]; this.hold = [0, 0]; this.holdT = [0, 0];
   }
   // Parameters are only pushed to the audio thread when they actually changed.
   sync(m) {
-    this.panTo(m.pan); this.vol(m.vol);
-    const j = JSON.stringify(m.fx);
-    if (j !== this.fxJson) { this.fxJson = j; this.setFx(m.fx); }
+    this.panTo(m.pan); this.vol(m.vol); this.stereo(m);
+    const j = JSON.stringify(m.fx) + (m.fxOff ? '|off' : '');
+    if (j !== this.fxJson) { this.fxJson = j; this.setFx(m.fx, !!m.fxOff); }
   }
   panTo(v) { if (v === this.lp) return; this.lp = v; this.pan.pan.setTargetAtTime(v, A.ctx.currentTime, 0.012); }
   vol(v) { if (v === this.lv) return; this.lv = v; this.fader.gain.setTargetAtTime(faderGain(v), A.ctx.currentTime, 0.012); }
-  setFx(list) {
-    const sig = list.map(f => f.id + ':' + f.type + ':' + (f.on ? 1 : 0)).join('|');
+  stereo(m) {
+    const [ll, rl, lr, rr] = stereoMatrix(m), key = ll + ',' + rl + ',' + lr + ',' + rr;
+    if (key === this.stKey) return;
+    this.stKey = key; const t = A.ctx.currentTime;
+    this.gLL.gain.setTargetAtTime(ll, t, 0.012); this.gRL.gain.setTargetAtTime(rl, t, 0.012);
+    this.gLR.gain.setTargetAtTime(lr, t, 0.012); this.gRR.gain.setTargetAtTime(rr, t, 0.012);
+  }
+  /** Output to the master or another insert, plus post-fader sends. */
+  routeTo(r, sends) {
+    if (this.i === 0) return;
+    if (r !== this.dest) { if (this.dest >= 0) { try { this.out.disconnect(); } catch (e) { /* ignore */ } } this.out.connect(A.strips[r].input); this.dest = r; }
+    const sig = sends.map(s => s.to).join(',');
+    if (sig !== this.sendSig) {
+      this.sendSig = sig;
+      for (const g of this.sendNodes.values()) { try { this.mute.disconnect(g); } catch (e) { /* ignore */ } try { g.disconnect(); } catch (e) { /* ignore */ } }
+      this.sendNodes.clear();
+      for (const s of sends) { const g = A.ctx.createGain(); g.gain.value = faderGain(s.lvl); this.mute.connect(g); g.connect(A.strips[s.to].input); this.sendNodes.set(s.to, g); }
+    }
+    const t = A.ctx.currentTime;
+    for (const s of sends) { const g = this.sendNodes.get(s.to); if (g && g._lv !== s.lvl) { g._lv = s.lvl; g.gain.setTargetAtTime(faderGain(s.lvl), t, 0.012); } }
+  }
+  setFx(list, allOff) {
+    const sig = list.map(f => f.id + ':' + f.type + ':' + (f.on ? 1 : 0)).join('|') + (allOff ? '|X' : '');
     const t = A.ctx.currentTime;
     if (sig === this.sig) { list.forEach((f, i) => this.units[i].set(f.p, t)); return; }
     this.sig = sig;
@@ -198,7 +245,7 @@ class Strip {
     this.input.disconnect();
     for (const u of next) { try { u.output.disconnect(); } catch (e) {} }
     let prev = this.input;
-    next.forEach((u, i) => { if (list[i].on) { prev.connect(u.input); prev = u.output; } });
+    next.forEach((u, i) => { if (list[i].on && !allOff) { prev.connect(u.input); prev = u.output; } });
     prev.connect(this.post);
     this.units = next;
   }
@@ -208,10 +255,57 @@ class Strip {
     return p;
   }
 }
+/* --------------------------- mixer routing --------------------------- */
+/* Each insert goes to the master or to one other insert, and can also send to others.
+   The routes form no loops (the mixer refuses a connection that would close one; a project
+   that has one anyway sends the offending inserts straight to the master). The desktop
+   engine builds the same graph in Model.cpp. */
+function mixGraph(mixer = P.mixer) {
+  const n = mixer.length, route = [], sends = [], out = [];
+  for (let i = 0; i < n; i++) {
+    const m = mixer[i] || {};
+    const r = m.route | 0;
+    route.push(i > 0 && r > 0 && r < n && r !== i ? r : 0);
+    const seen = new Set();
+    sends.push(i > 0 && Array.isArray(m.sends) ? m.sends.filter(s => s && Number.isInteger(s.to) && s.to >= 0 && s.to < n && s.to !== i && s.to !== route[i] && !seen.has(s.to) && seen.add(s.to)).map(s => ({ to: s.to, lvl: clamp(+s.lvl || 0, 0, 1) })) : []);
+  }
+  // Kahn's algorithm over inserts 1..n-1; whatever is left in a loop loses its routing.
+  const edges = i => [route[i], ...sends[i].map(s => s.to)].filter(t => t > 0);
+  const indeg = new Array(n).fill(0);
+  for (let i = 1; i < n; i++) for (const t of edges(i)) indeg[t]++;
+  const order = [], q = [];
+  for (let i = 1; i < n; i++) if (!indeg[i]) q.push(i);
+  while (q.length) { const i = q.shift(); order.push(i); for (const t of edges(i)) if (--indeg[t] === 0) q.push(t); }
+  if (order.length < n - 1) for (let i = 1; i < n; i++) if (!order.includes(i)) { route[i] = 0; sends[i] = sends[i].filter(s => s.to === 0); order.push(i); }
+  for (let i = 0; i < n; i++) out.push(i === 0 ? [] : [route[i], ...sends[i].map(s => s.to)]);
+  return { route, sends, order, out };
+}
+/** True if audio leaving insert `from` can reach insert `to`. */
+function mixReaches(g, from, to) {
+  const seen = new Set([from]), st = [from];
+  while (st.length) { const x = st.pop(); if (x === to) return true; for (const y of g.out[x] || []) if (!seen.has(y)) { seen.add(y); st.push(y); } }
+  return false;
+}
+/** Which inserts are audible: solo keeps the soloed inserts, everything feeding them and their path to the master. */
+function mixActive(g, mixer = P.mixer) {
+  const any = mixer.some((m, i) => i > 0 && m.solo);
+  return mixer.map((m, i) => {
+    if (m.mute) return false;
+    if (i === 0 || !any || m.solo) return true;
+    for (let j = 1; j < mixer.length; j++) if (mixer[j].solo && (mixReaches(g, i, j) || mixReaches(g, j, i))) return true;
+    return false;
+  });
+}
+/** Gains (ll, rl, lr, rr) of the stereo tool: polarity, separation 0 (mono) to 2 (extra wide), swap. */
+function stereoMatrix(m) {
+  const w = clamp(m.width ?? 1, 0, 2), p = m.phase ? -1 : 1, a = (1 + w) / 2 * p, b = (1 - w) / 2 * p;
+  return m.swap ? [b, a, a, b] : [a, b, b, a];
+}
 function applySolo() {
   if (!A.ctx) return;
-  const any = P.mixer.some((m, i) => i > 0 && m.solo), t = A.ctx.currentTime;
-  const ons = P.mixer.map((m, i) => i === 0 ? !m.mute : !(m.mute || (any && !m.solo)));
+  const g = mixGraph(), t = A.ctx.currentTime;
+  for (let i = 1; i <= NINS; i++) A.strips[i].routeTo(g.route[i], g.sends[i]);
+  const ons = mixActive(g);
   const key = ons.join();
   if (key === A.soloKey) return;
   A.soloKey = key;
@@ -564,14 +658,24 @@ function sampler(ch, t, key, vel, dest) {
   const c = A.ctx, p = ch.params, src = c.createBufferSource();
   src.buffer = p.rev ? (s.rev || (s.rev = reverseBuffer(s.buf))) : s.buf;
   const rate = Math.pow(2, (key - 60 + (p.pitch || 0)) / 12); src.playbackRate.value = rate;
-  const g = c.createGain(), out = c.createGain(); src.connect(g); g.connect(out); out.connect(dest);
-  const att = p.att || 0.002, peak = vel * (p.gain ?? 0.8);
+  const g = c.createGain(), out = c.createGain();
+  if (p.ft > 0) {
+    const f = c.createBiquadFilter(); f.type = ['lowpass', 'highpass', 'bandpass'][(p.ft | 0) - 1] || 'lowpass';
+    f.frequency.value = clamp(p.fc ?? 18000, 30, 20000); f.Q.value = p.fq ?? 0.8;
+    src.connect(f); f.connect(g);
+  } else src.connect(g);
+  g.connect(out); out.connect(dest);
+  const att = p.att || 0.002, peak = vel * (p.gain ?? 0.8) * (p.norm ? (s.normGain || 1) : 1), sus = clamp(p.sus ?? 1, 0, 1);
   g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak, t + att);
-  const off = clamp(p.start || 0, 0, 0.95) * src.buffer.duration;
+  if (sus < 0.999) g.gain.setTargetAtTime(peak * sus, t + att, Math.max(0.003, (p.dec ?? 0.3) / 3));
+  const dur = src.buffer.duration, sp = samplerSpan(p), off = sp.st * dur, loop = !!p.loop;
+  let end = t + (sp.en * dur - off) / rate;
+  if (loop) { src.loop = true; src.loopStart = sp.ls * dur; src.loopEnd = sp.en * dur; end = t + 600; }
   src.start(t, off);
-  const hd = mkHandle(out, [src], t, t + (src.buffer.duration - off) / rate);
+  if (!loop && sp.en < 0.999) src.stop(end);
+  const hd = mkHandle(out, [src], t, end);
   hd.release = te => {
-    if (p.oneshot) return;
+    if (p.oneshot && !loop) return;
     te = Math.max(te, t + att + 0.001);
     if (hd.relAt != null && hd.relAt <= te) return;
     hd.relAt = te; g.gain.setTargetAtTime(0, te, Math.max(0.004, (p.rel || 0.1) / 4));
@@ -654,21 +758,24 @@ function scheduleStep(s, t, sd) {
   if (A.playMode === 'pat') { const p = curPat(); schedPat(p, s % p.len, t, sd); }
   else {
     for (const cl of P.playlist.clips) {
-      if (s < cl.start || s >= cl.start + cl.len || P.playlist.mute[cl.track]) continue;
+      if (s < cl.start || s >= cl.start + cl.len || cl.mute || P.playlist.mute[cl.track]) continue;
       const pat = patById(cl.pat); if (!pat || !pat.len) continue;
-      schedPat(pat, (s - cl.start) % pat.len, t, sd);
+      schedPat(pat, clipLocal(cl, pat, s), t, sd);
     }
   }
 }
+/** Step inside the pattern that a clip plays at song step s (clips can start part-way into their pattern). */
+function clipLocal(cl, pat, s) { return (((s - cl.start + (cl.off | 0)) % pat.len) + pat.len) % pat.len; }
 function schedPat(pat, ls, t, sd) {
   for (const ch of P.channels) {
     if (ch.mute) continue;
     const ns = pat.notes[ch.id]; if (!ns || !ns.length) continue;
+    const sw = P.swing * (ch.swing ?? 1);
     for (const n of ns) {
-      if (n.t < ls || n.t >= ls + 1) continue;
+      if (n.t < ls || n.t >= ls + 1 || n.mute) continue;
       if (n.chance != null && n.chance < 1 && Math.random() >= n.chance) continue;
       let off = (n.t - ls) * sd;
-      if (Math.floor(n.t + 1e-6) % 2 === 1) off += P.swing * sd * 0.66;
+      if (Math.floor(n.t + 1e-6) % 2 === 1) off += sw * sd * 0.66;
       const rep = n.rep > 1 ? n.rep : 1;
       if (rep === 1) playNote(ch, t + off, n.key, n.vel, n.len * sd);
       else { const sub = n.len / rep * sd; for (let r = 0; r < rep; r++) playNote(ch, t + off + r * sub, n.key, n.vel * (r ? 0.9 : 1), sub * 0.92); }
@@ -722,43 +829,53 @@ function patLocalPos(patId) {
   const v = A.vis; if (!v) return null;
   if (v.mode === 'pat') return S.pat === patId ? v.s : null;
   const pat = patById(patId); if (!pat) return null;
-  for (const c of P.playlist.clips) if (c.pat === patId && !P.playlist.mute[c.track] && v.s >= c.start && v.s < c.start + c.len) return (v.s - c.start) % pat.len;
+  for (const c of P.playlist.clips) if (c.pat === patId && !c.mute && !P.playlist.mute[c.track] && v.s >= c.start && v.s < c.start + c.len) return clipLocal(c, pat, v.s);
   return null;
 }
 
 /* --------------------------- live playing + recording --------------------------- */
 A.heldSet = new Set();
-function noteOn(key, vel = 0.8) {
-  const ch = selCh(); if (!ch) { hint('Add a channel first to play notes'); return; }
+A.capture = [];
+/* external: a note the desktop engine already played (hardware MIDI); only recording and capture use it.
+   Its `ago` says how many milliseconds ago it was played. */
+function noteOn(key, vel = 0.8, external) {
+  const ch = selCh(); if (!ch) { if (!external) hint('Add a channel first to play notes'); return; }
   const c = audio(); if (!c) return;
   if (A.held.has(key)) return;
+  const lag = external ? (external.ago || 0) / 1000 : 0;
   const t = c.currentTime + 0.004;
-  const hd = playNote(ch, t, key, vel, null);
+  const hd = external ? null : playNote(ch, t, key, vel, null);
   if (hd) A.heldSet.add(hd);
-  let rec = null;
-  if (S.rec && A.playing) {
-    const v = curPos();
-    if (v) {
-      let local = null;
-      if (v.mode === 'pat') local = v.s;
-      else { const pat = curPat(); for (const cl of P.playlist.clips) if (cl.pat === pat.id && v.s >= cl.start && v.s < cl.start + cl.len) { local = (v.s - cl.start) % pat.len; break; } }
-      if (local != null) rec = { local, t0: c.currentTime, chId: ch.id, patId: S.pat };
-      else hint('Recording: place the current pattern under the playhead, or switch to PAT mode');
-    }
+  let rec = null, local = null;
+  const v = A.playing ? curPos() : null;
+  if (v) {
+    const s = v.s - lag / stepDur();
+    if (v.mode === 'pat') local = ((s % curPat().len) + curPat().len) % curPat().len;
+    else { const pat = curPat(); for (const cl of P.playlist.clips) if (cl.pat === pat.id && s >= cl.start && s < cl.start + cl.len) { local = clipLocal(cl, pat, s); break; } }
   }
-  A.held.set(key, { hd, rec, vel });
+  if (S.rec && A.playing && v) {
+    if (local != null) rec = { local, t0: c.currentTime - lag, chId: ch.id, patId: S.pat };
+    else hint('Recording: place the current pattern under the playhead, or switch to PAT mode');
+  }
+  A.held.set(key, { hd, rec, vel, cap: { key, vel, t0: performance.now() - lag * 1000, local, patId: S.pat, bpm: P.bpm } });
   if (UI.inst) UI.inst.keyState(key, true);
   if (UI.pr) UI.pr.dirty = true;
 }
-function noteOff(key) {
+function noteOff(key, external) {
   const e = A.held.get(key); if (!e) return;
   A.held.delete(key);
+  const lag = external ? (external.ago || 0) / 1000 : 0;
   if (e.hd) { A.heldSet.delete(e.hd); if (e.hd.release) e.hd.release(A.ctx.currentTime); }
   if (UI.inst) UI.inst.keyState(key, false);
   if (UI.pr) UI.pr.dirty = true;
+  if (e.cap) {
+    e.cap.t1 = Math.max(e.cap.t0 + 20, performance.now() - lag * 1000);
+    A.capture.push(e.cap);
+    if (A.capture.length > 1024) A.capture.splice(0, A.capture.length - 1024);
+  }
   if (e.rec) {
     const pat = patById(e.rec.patId), ch = chById(e.rec.chId); if (!pat || !ch) return;
-    const sn = S.prSnap || 0.25, lenSteps = (A.ctx.currentTime - e.rec.t0) / stepDur();
+    const sn = S.prSnap || 0.25, lenSteps = (A.ctx.currentTime - lag - e.rec.t0) / stepDur();
     let t0 = snapRound(e.rec.local, sn); if (t0 >= pat.len) t0 -= pat.len;
     const len = Math.max(sn || 0.25, snapRound(lenSteps, sn) || sn);
     Hist.push();

@@ -14,7 +14,11 @@ Engine::Engine (SampleBank& b) : bank (b)
     scope.assign (4096, 0.0f);
     auto m = std::make_shared<Model>();
     m->mixer.resize (kNumInserts + 1);
+    Model::buildMixGraph (*m);
     model = m;
+    mixOrder.reserve (kNumInserts + 1);
+    mixOrder = m->mixOrder;
+    for (auto& ins : inserts) { ins.ll.init (1); ins.rr.init (1); ins.mute.init (1); }
     prepareAll (48000, 512);
 }
 
@@ -63,6 +67,8 @@ void Engine::prepareAll (double sr, int block)
         ins.vol.setTau (0.012, sampleRate);
         ins.pan.setTau (0.012, sampleRate);
         ins.mute.setTau (0.01, sampleRate);
+        for (auto* sm : { &ins.ll, &ins.rl, &ins.lr, &ins.rr }) sm->setTau (0.012, sampleRate);
+        for (auto& sm : ins.send) sm.setTau (0.012, sampleRate);
         const auto& im = model->mixer[i];
         for (size_t k = 0; k < ins.fx.size(); ++k)
         {
@@ -266,7 +272,6 @@ void Engine::setProject (const juce::var& project)
         for (size_t c = 0; c < order.size(); ++c)
             applyChannel (*order[c], m->channels[c]);
 
-        const bool anySolo = std::any_of (m->mixer.begin() + 1, m->mixer.end(), [] (const InsertModel& im) { return im.solo; });
         const double sps = m->samplesPerStep (sampleRate);
         for (size_t i = 0; i <= (size_t) kNumInserts; ++i)
         {
@@ -289,9 +294,23 @@ void Engine::setProject (const juce::var& project)
             for (size_t k = 0; k < im.fx.size(); ++k) ins.on[k] = im.fx[k].on;
             ins.vol.setTarget (dsp::faderGain (im.vol));
             ins.pan.setTarget (im.pan);
-            const bool on = i == 0 ? ! im.mute : ! (im.mute || (anySolo && ! im.solo));
-            ins.mute.setTarget (on ? 1.0 : 0.0);
+            ins.mute.setTarget (im.active ? 1.0 : 0.0);
+            ins.fxOff = im.fxOff;
+            double ll, rl, lr, rr;
+            im.stereoMatrix (ll, rl, lr, rr);
+            ins.ll.setTarget (ll); ins.rl.setTarget (rl); ins.lr.setTarget (lr); ins.rr.setTarget (rr);
+            ins.route = im.route;
+            std::array<bool, kNumInserts + 1> nowOn {};
+            for (auto& sd : im.sends)
+            {
+                const auto t = (size_t) sd.to;
+                nowOn[t] = true;
+                if (! ins.sendOn[t]) ins.send[t].init (dsp::faderGain (sd.level));   // a new send starts at its level
+                ins.send[t].setTarget (dsp::faderGain (sd.level));
+            }
+            ins.sendOn = nowOn;
         }
+        mixOrder = m->mixOrder;
         masterGain.setTarget (m->master * 1.1);
         selectedChannel = m->selectedChannel;
     }
@@ -372,6 +391,12 @@ void Engine::handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMessag
 {
     const auto ch = selectedChannel.load();
     if (ch == 0) return;
+    if (m.isNoteOn() || m.isNoteOff())
+    {
+        const juce::SpinLock::ScopedLockType sl (midiLock);
+        if (midiLog.size() < 512)
+            midiLog.push_back ({ m.getNoteNumber(), m.isNoteOn() ? m.getFloatVelocity() : 0.0f, juce::Time::getMillisecondCounterHiRes() });
+    }
     if (m.isNoteOn()) post ({ Cmd::NoteOn, ch, m.getNoteNumber(), m.getFloatVelocity(), -1, false });
     else if (m.isNoteOff()) post ({ Cmd::NoteOff, ch, m.getNoteNumber(), 0, 0, false });
     else if (m.isAllNotesOff() || m.isAllSoundOff()) post ({ Cmd::AllOff, 0, 0, 0, 0, false });
@@ -519,7 +544,7 @@ void Engine::scheduleStep (int s, double when, double sps)
             if (c.track < (int) m.trackMute.size() && m.trackMute[(size_t) c.track]) continue;
             const auto& pat = m.patterns[(size_t) c.pattern];
             if (pat.len <= 0) continue;
-            schedulePattern (pat, (s - c.start) % pat.len, when, sps);
+            schedulePattern (pat, (((s - c.start + c.off) % pat.len) + pat.len) % pat.len, when, sps);
         }
     }
 }
@@ -539,7 +564,7 @@ void Engine::schedulePattern (const PatternModel& pat, int ls, double when, doub
             const auto& n = *it;
             if (n.chance < 1.0f && dsp::sharedRandom().uniform01() >= n.chance) continue;
             double off = (n.t - ls) * sps;
-            if (((int) std::floor (n.t + 1e-6)) % 2 == 1) off += m.swing * sps * 0.66;
+            if (((int) std::floor (n.t + 1e-6)) % 2 == 1) off += m.swing * m.channels[c].swing * sps * 0.66;
             const auto h = m.channels[c].hash;
             if (n.rep <= 1)
                 pushEvent ({ (juce::int64) std::llround (when + off), h, n.vel, n.len * sps, n.key, nextTag++ });
@@ -590,6 +615,8 @@ void Engine::resetDsp()
     {
         for (auto& fx : ins.fx) fx->reset();
         ins.vol.snap(); ins.pan.snap(); ins.mute.snap();     // a render starts at the mix's levels
+        ins.ll.snap(); ins.rl.snap(); ins.lr.snap(); ins.rr.snap();
+        for (auto& sg : ins.send) sg.snap();
     }
     masterGain.snap();
     limiter.reset();
@@ -662,19 +689,24 @@ void Engine::processBlock (float* outL, float* outR, int n, float* const* stems)
     auto runInsert = [&] (int i, float* L, float* R)
     {
         auto& ins = inserts[(size_t) i];
-        for (size_t k = 0; k < ins.fx.size(); ++k)
-            if (ins.on[k]) ins.fx[k]->process (L, R, n, blockStart);
+        if (! ins.fxOff)
+            for (size_t k = 0; k < ins.fx.size(); ++k)
+                if (ins.on[k]) ins.fx[k]->process (L, R, n, blockStart);
 
         double lastPan = -9;
         float ll = 1, rl = 0, lr = 0, rr = 1;
         float pkL = 0, pkR = 0;
         for (int s = 0; s < n; ++s)
         {
+            // stereo tool (polarity, separation, swap), then pan and fader
+            const float sl = L[s], sr = R[s];
+            const float xl = (float) (sl * ins.ll.next() + sr * ins.rl.next());
+            const float xr = (float) (sl * ins.lr.next() + sr * ins.rr.next());
             const double p = ins.pan.next();
             if (std::abs (p - lastPan) > 1.0e-5) { lastPan = p; dsp::PanLaw::stereoGains (p, ll, rl, lr, rr); }
             const float g = (float) (ins.vol.next() * ins.mute.next());
-            const float l = (L[s] * ll + R[s] * rl) * g;
-            const float r = (L[s] * lr + R[s] * rr) * g;
+            const float l = (xl * ll + xr * rl) * g;
+            const float r = (xl * lr + xr * rr) * g;
             L[s] = l; R[s] = r;
             pkL = juce::jmax (pkL, std::abs (l));
             pkR = juce::jmax (pkR, std::abs (r));
@@ -685,7 +717,8 @@ void Engine::processBlock (float* outL, float* outR, int n, float* const* stems)
         while (pkR > cur && ! ins.peakR.compare_exchange_weak (cur, pkR)) {}
     };
 
-    for (int i = 1; i <= kNumInserts; ++i)
+    // Inserts in routing order: each one is finished before the inserts it feeds.
+    for (int i : mixOrder)
     {
         float* L = busBuf.getWritePointer (i * 2);
         float* R = busBuf.getWritePointer (i * 2 + 1);
@@ -695,8 +728,23 @@ void Engine::processBlock (float* outL, float* outR, int n, float* const* stems)
             juce::FloatVectorOperations::copy (stems[(i - 1) * 2], L, n);
             juce::FloatVectorOperations::copy (stems[(i - 1) * 2 + 1], R, n);
         }
-        juce::FloatVectorOperations::add (mL, L, n);
-        juce::FloatVectorOperations::add (mR, R, n);
+        auto& ins = inserts[(size_t) i];
+        const int r = juce::jlimit (0, kNumInserts, ins.route);
+        juce::FloatVectorOperations::add (busBuf.getWritePointer (r * 2), L, n);
+        juce::FloatVectorOperations::add (busBuf.getWritePointer (r * 2 + 1), R, n);
+        for (int t = 0; t <= kNumInserts; ++t)
+        {
+            if (! ins.sendOn[(size_t) t]) continue;
+            float* tL = busBuf.getWritePointer (t * 2);
+            float* tR = busBuf.getWritePointer (t * 2 + 1);
+            auto& sg = ins.send[(size_t) t];
+            for (int s = 0; s < n; ++s)
+            {
+                const float g = (float) sg.next();
+                tL[s] += L[s] * g;
+                tR[s] += R[s] * g;
+            }
+        }
     }
 
     runInsert (0, mL, mR);
@@ -795,6 +843,17 @@ Engine::Status Engine::readStatus()
         double red = 0;
         for (auto& fx : ins.fx) red = juce::jmin (red, fx->reductionDb());
         st.reduction[i] = (float) red;
+    }
+
+    {
+        std::vector<MidiNote> notes;
+        {
+            const juce::SpinLock::ScopedLockType sl (midiLock);
+            notes.swap (midiLog);
+        }
+        const double now = juce::Time::getMillisecondCounterHiRes();
+        for (auto& mn : notes)
+            st.midi.add (juce::Array<juce::var> { mn.key, std::round (mn.vel * 1000.0) / 1000.0, juce::jmax (0.0, std::round (now - mn.ms)) });
     }
 
     const double window = 0.12 * sampleRate;

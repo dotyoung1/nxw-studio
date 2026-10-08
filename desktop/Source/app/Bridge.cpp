@@ -540,7 +540,7 @@ void Bridge::timerCallback()
 void Bridge::sendTick()
 {
     auto st = sv.engine.readStatus();
-    const bool busy = st.playing || st.voices > 0 || ! st.hits.isEmpty();
+    const bool busy = st.playing || st.voices > 0 || ! st.hits.isEmpty() || ! st.midi.isEmpty();
     float loud = 0;
     for (auto& m : st.meters) loud = juce::jmax (loud, m[0], m[1]);
     static int quietTicks = 0;
@@ -563,7 +563,7 @@ void Bridge::sendTick()
     }
     emit (obj ({ { "type", "tick" }, { "playing", st.playing }, { "pat", st.patMode }, { "pos", st.position },
                  { "meters", meters }, { "red", red }, { "voices", st.voices }, { "cpu", r3 (st.cpu) },
-                 { "hits", st.hits }, { "scope", scope } }));
+                 { "hits", st.hits }, { "scope", scope }, { "midi", st.midi } }));
 }
 
 //==============================================================================

@@ -164,9 +164,11 @@ private:
     {
         VoiceCommon c;
         std::shared_ptr<SampleData> data;
-        bool reverse = false, oneshot = true;
+        bool reverse = false, oneshot = true, loop = false, filtered = false;
         double pos = 0, rate = 1, att = 0.002, rel = 0.12;
+        double endPos = 0, loopFrom = 0;     // in source samples
         dsp::Timeline g;
+        dsp::Biquad filter;
     };
     void release (Voice& v, double localTime);
 

@@ -59,6 +59,7 @@ public:
         int voices = 0;
         double cpu = 0;
         juce::Array<juce::var> hits;  // channel ids that just played
+        juce::Array<juce::var> midi;  // hardware notes since the last status: [key, velocity (0 = off), ms ago]
     };
 
     explicit Engine (SampleBank&);
@@ -142,7 +143,12 @@ private:
     {
         std::vector<std::unique_ptr<Effect>> fx;
         std::vector<bool> on;
+        bool fxOff = false;
         dsp::Smoother vol, pan, mute;
+        dsp::Smoother ll, rl, lr, rr;                       // stereo tool matrix
+        int route = 0;                                      // output: 0 master, else an insert
+        std::array<dsp::Smoother, kNumInserts + 1> send;    // post-fader send gain per target
+        std::array<bool, kNumInserts + 1> sendOn {};
         std::atomic<float> peakL { 0 }, peakR { 0 };
     };
     struct Event
@@ -192,6 +198,7 @@ private:
     std::unique_ptr<ChannelState> previewCh;
     juce::String previewJson;                                         // message thread only
     std::array<InsertState, kNumInserts + 1> inserts;
+    std::vector<int> mixOrder;                                         // audio thread reads under lock
     std::vector<std::unique_ptr<ChannelState>> deadChannels;
     std::vector<std::unique_ptr<Effect>> deadEffects;
     std::map<juce::String, juce::String> stash;                       // plugin states waiting for owners
@@ -227,6 +234,11 @@ private:
     std::atomic<int> scopeWrite { 0 };
     std::atomic<juce::uint64> selectedChannel { 0 };
     std::atomic<int> outputLatency { 0 };
+
+    // hardware MIDI notes for the interface (recording and capture); the engine plays them itself
+    struct MidiNote { int key; float vel; double ms; };
+    juce::SpinLock midiLock;
+    std::vector<MidiNote> midiLog;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Engine)
 };

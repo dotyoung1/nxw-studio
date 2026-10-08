@@ -14,7 +14,7 @@ import pathlib, re, sys
 ROOT = pathlib.Path(__file__).resolve().parent
 SRC = ROOT / 'src'
 DIST = ROOT / 'dist'
-ORDER = ['core.js', 'native.js', 'audio.js', 'library.js', 'export.js', 'shell.js', 'browser.js', 'rack.js',
+ORDER = ['core.js', 'native.js', 'audio.js', 'tools.js', 'library.js', 'export.js', 'shell.js', 'browser.js', 'rack.js',
          'pianoroll.js', 'playlist.js', 'mixer.js', 'instrument.js', 'main.js']
 
 FONT_FACES = """

@@ -127,6 +127,13 @@ const IC = {
   wsq: '<path d="M3 16V8h6v8h6V8h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>',
   scissors: '<circle cx="6.5" cy="17.5" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="17.5" cy="17.5" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8.6 15.4L18 4M15.4 15.4L6 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
   export: '<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 15.5V19h14v-3.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>',
+  tools: '<path d="M14.5 5.5a4 4 0 0 0-5 5L4.5 15.5a1.8 1.8 0 0 0 2.5 2.5l5-5a4 4 0 0 0 5-5l-2.4 2.4-2.1-.5-.5-2.1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>',
+  chords: '<rect x="4" y="5" width="7" height="3" rx="1" fill="currentColor"/><rect x="4" y="10.5" width="7" height="3" rx="1" fill="currentColor" opacity=".75"/><rect x="4" y="16" width="7" height="3" rx="1" fill="currentColor" opacity=".55"/><rect x="13" y="7" width="7" height="3" rx="1" fill="currentColor"/><rect x="13" y="12.5" width="7" height="3" rx="1" fill="currentColor" opacity=".7"/>',
+  capture: '<circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 7.5V12l3 2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/>',
+  star: '<path d="M12 4.5l2.3 4.7 5.2.8-3.8 3.6.9 5.1L12 16.3l-4.6 2.4.9-5.1-3.8-3.6 5.2-.8z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>',
+  starf: '<path d="M12 4.5l2.3 4.7 5.2.8-3.8 3.6.9 5.1L12 16.3l-4.6 2.4.9-5.1-3.8-3.6 5.2-.8z" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>',
+  marker: '<path d="M6 4v16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M6 5h11l-2.5 3.5L17 12H6z" fill="currentColor"/>',
+  route: '<circle cx="6" cy="12" r="2.2" fill="currentColor"/><path d="M8 12h4l4-5h3M12 12l4 5h3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
 };
 const icon = (n, s = 16) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" aria-hidden="true">${IC[n] || ''}</svg>`;
 
@@ -137,7 +144,7 @@ const S = {             // UI/session state (not part of undo history)
   pat: null, ch: null, lane: 'steps', prTool: 'draw', plTool: 'draw', prSnap: 1, plSnap: 16,
   chord: 'Single note', scaleRoot: 9, scale: 'Minor', ghost: true, mixSel: 1, fxSel: 0, oct: 4,
   typing: true, rec: false, metro: false, mode: 'song', prZoomX: 22, prZoomY: 14, plZoom: 5, prLastLen: 1,
-  timeMode: 'bars', brClosed: {},
+  timeMode: 'bars', brClosed: {}, scaleLock: false, brFav: {}, brRecent: [],
 };
 
 function newPattern(n, color) {
@@ -173,7 +180,7 @@ function growPattern(pat) {
   let end = 0;
   for (const id in pat.notes) for (const n of pat.notes[id]) end = Math.max(end, n.t + Math.min(n.len, 0.999));
   const need = Math.ceil(end / STEP) * STEP;
-  if (need > pat.len) pat.len = Math.min(need, 256);
+  if (need > pat.len) pat.len = Math.min(need, 1024);
 }
 
 /* ------------------------------ persistence ------------------------------ */

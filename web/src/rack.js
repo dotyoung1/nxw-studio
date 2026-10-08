@@ -6,6 +6,66 @@ const stepsWidth = len => len * STEP_W + (len - 1) * STEP_GAP + (Math.ceil(len /
 const isStepRow = (notes, root) => notes.every(n => Math.abs(n.t - Math.round(n.t)) < 1e-6 && n.key === root && n.len <= 1.0001);
 const r2 = v => Math.round(v * 100) / 100;
 const REPS = [1, 2, 3, 4, 6, 8];   // note repeat (ratchet) counts per step
+let RACK_CLIP = null;              // notes copied from one channel, to paste into another
+/** Replaces a channel's instrument, keeping its notes, mixer route, volume, pan and colour. */
+function replaceInstrument(ch, spec) {
+  if (!spec) return;
+  edit(() => {
+    const fresh = makeChannel(spec);
+    for (const k of ['type', 'params', 'sample', 'plugin', 'preset']) { if (fresh[k] !== undefined) ch[k] = fresh[k]; else delete ch[k]; }
+    ch.name = spec.name;
+  });
+  if (A.ctx) syncAudio();
+  toast(ch.name + ' now plays ' + spec.name);
+}
+function replaceMenuItems(ch) {
+  return [
+    { head: 'Replace ' + ch.name + ' with' },
+    ...DRUMS.map((d, i) => ({ label: d.name, action: () => replaceInstrument(ch, specFromBrowser({ kind: 'drum', i })) })),
+    ...Object.keys(SYNTH_PRESETS).map(n => ({ label: 'NX-3 · ' + n, action: () => replaceInstrument(ch, { type: 'synth', name: n, preset: n }) })),
+    { label: 'Sampler (load a file)…', action: () => { replaceInstrument(ch, { type: 'sampler', name: 'Sampler', sample: null }); UI.inst.replaceTarget = ch.id; $('#fileIn').click(); } },
+    ...(NATIVE.on ? NATIVE.plugins.filter(q => q.instrument).map(q => ({ label: q.name, hint: q.vendor, action: () => replaceInstrument(ch, { type: 'plugin', name: q.name, plugin: NATIVE.pluginRef(q) }) })) : []),
+  ];
+}
+function euclidDialog(ch) {
+  const pat = curPat(), num = (v, min, max) => h('input', { type: 'number', class: 'num', value: String(v), min, max, step: 1 });
+  const hits = num(5, 0, pat.len), steps = num(Math.min(16, pat.len), 1, pat.len), rot = num(0, 0, pat.len - 1);
+  const prev = h('div', { class: 'eu-prev', 'aria-hidden': 'true' });
+  const draw = () => { const p = euclid(+hits.value || 0, clamp(+steps.value || 16, 1, pat.len), +rot.value || 0); prev.textContent = ''; p.forEach((on, i) => prev.append(h('i', { class: on ? 'on' : '', style: { marginRight: i % 4 === 3 ? '5px' : null } }))); };
+  for (const el of [hits, steps, rot]) el.addEventListener('input', draw);
+  draw();
+  const row = (l, el, sub) => h('label', { class: 'frow' }, h('span', null, l), el, sub ? h('small', null, sub) : null);
+  dialog('Euclidean rhythm · ' + ch.name, h('div', { class: 'form' },
+    h('p', { class: 'dlg-note' }, 'Spreads a number of hits as evenly as possible over a cycle of steps, the way many world rhythms are built. The cycle repeats to fill the pattern.'),
+    row('Hits', hits), row('Cycle length', steps, 'steps'), row('Rotate', rot, 'steps'), prev), [
+    { label: 'Cancel' },
+    { label: 'Fill', primary: true, action: () => {
+      const n = clamp(+steps.value || 16, 1, pat.len), p = euclid(+hits.value || 0, n, +rot.value || 0), root = rootKey(ch);
+      edit(() => { const keep = (pat.notes[ch.id] || []).filter(q => !(q.key === root && Number.isInteger(q.t))); for (let i = 0; i < pat.len; i++) if (p[i % n]) keep.push({ t: i, len: 1, key: root, vel: i % 4 === 0 ? 0.86 : 0.74, chance: 1 }); pat.notes[ch.id] = keep; });
+    } }]);
+}
+function routeToFreeInsert(ch) {
+  const used = new Set(P.channels.filter(c => c !== ch).map(c => c.mixer));
+  for (let i = 1; i <= NINS; i++) if (!used.has(i)) { edit(() => { ch.mixer = i; const m = P.mixer[i]; if (/^Insert \d+$/.test(m.name)) m.name = ch.name; }); hint(ch.name + ' → insert ' + i); return; }
+  toast('Every mixer insert is already in use');
+}
+function rackOptionsMenu(anchor) {
+  const byName = (a, b) => natCmp(a.name, b.name);
+  const typeRank = c => ({ drum: 0, sampler: 1, synth: 2, plugin: 3 })[c.type] ?? 4;
+  const unused = P.channels.filter(c => !P.patterns.some(q => (q.notes[c.id] || []).length));
+  menuAt(anchor, [
+    { head: 'Channel rack' },
+    { label: 'Sort by name', action: () => edit(() => { P.channels.sort(byName); }) },
+    { label: 'Sort by type', action: () => edit(() => { P.channels.sort((a, b) => typeRank(a) - typeRank(b) || byName(a, b)); }) },
+    { label: 'Route every channel to its own insert', hint: 'Channels on the master or sharing an insert get a free one', action: () => edit(() => {
+      const taken = new Set();
+      for (const c of P.channels) { if (c.mixer > 0 && !taken.has(c.mixer)) { taken.add(c.mixer); continue; } for (let i = 1; i <= NINS; i++) if (!taken.has(i)) { c.mixer = i; taken.add(i); const m = P.mixer[i]; if (/^Insert \d+$/.test(m.name)) m.name = c.name; break; } }
+    }) },
+    { label: 'Paste notes into the selected channel', disabled: !RACK_CLIP || !selCh(), action: () => { const ch = selCh(); edit(() => { const pat = curPat(); pat.notes[ch.id] = (pat.notes[ch.id] || []).concat(RACK_CLIP.map(n => Object.assign({}, n, { key: n.key - RACK_CLIP.root + rootKey(ch) }))); growPattern(pat); }); } },
+    { sep: true },
+    { label: 'Delete unused channels (' + unused.length + ')', danger: true, disabled: !unused.length, hint: 'Channels with no notes in any pattern', action: () => edit(() => { P.channels = P.channels.filter(c => !unused.includes(c)); if (!chById(S.ch)) S.ch = P.channels[0] ? P.channels[0].id : null; }) },
+  ]);
+}
 
 UI.rack = {
   cells: [], rowsById: new Map(), nowIdx: -1,
@@ -26,9 +86,11 @@ UI.rack = {
         .map(([k, l, hn]) => h('button', { dataset: { k }, 'data-hint': hn, onclick: () => { S.lane = k; scheduleSave(); this.render(); } }, l)));
     const add = h('button', { class: 'btn', 'data-hint': 'Add an instrument channel', html: icon('plus', 13) + '<span>Add</span>' });
     add.onclick = () => menuAt(add, addMenuItems());
+    const opts = h('button', { class: 'btn ghost', 'aria-label': 'Channel rack options', 'data-hint': 'Sort channels, route them to free inserts, delete unused ones', html: icon('dots', 15) });
+    opts.onclick = () => rackOptionsMenu(opts);
     w.tools.append();
     const tb = h('div', { class: 'tb' }, this.patBtn, h('span', { class: 'div' }), h('div', { class: 'ks' }, this.swing, h('span', { class: 'lbl' }, 'Swing')),
-      h('span', { class: 'div' }), this.lenSel, h('span', { class: 'div' }), this.laneSeg, h('span', { style: { flex: '1' } }), add);
+      h('span', { class: 'div' }), this.lenSel, h('span', { class: 'div' }), this.laneSeg, h('span', { style: { flex: '1' } }), add, opts);
     this.rows = h('div', { class: 'rack-rows' });
     const foot = h('div', { class: 'rack-foot' },
       h('button', { class: 'addch', 'data-hint': 'Add an instrument channel', onclick: e => menuAt(e.currentTarget, addMenuItems()), html: icon('plus', 13) + '<span>Channel</span>' }),
@@ -86,13 +148,20 @@ UI.rack = {
       { label: 'Rename…', action: () => askText(anchor, ch.name, v => edit(() => { ch.name = v; })) },
       { sep: true },
       { label: 'Fill every 2 steps', action: () => fill(2) }, { label: 'Fill every 4 steps', action: () => fill(4) }, { label: 'Fill every 8 steps', action: () => fill(8) },
+      { label: 'Euclidean rhythm…', hint: 'Spread hits evenly: 3 in 8, 5 in 16 and so on', action: () => euclidDialog(ch) },
+      { label: 'Randomize steps', hint: 'A new random step pattern (on the beat more often)', action: () => edit(() => { const root = rootKey(ch); const keep = (pat.notes[ch.id] || []).filter(q => !(q.key === root && Number.isInteger(q.t))); for (let i = 0; i < pat.len; i++) if (Math.random() < (i % 4 === 0 ? 0.6 : i % 2 === 0 ? 0.3 : 0.15)) keep.push({ t: i, len: 1, key: root, vel: r2(0.6 + Math.random() * 0.35), chance: 1 }); pat.notes[ch.id] = keep; }) },
       { label: 'Rotate left', action: () => rot(-1) }, { label: 'Rotate right', action: () => rot(1) },
+      { label: 'Copy notes', disabled: !(pat.notes[ch.id] || []).length, action: () => { RACK_CLIP = (pat.notes[ch.id] || []).map(n => Object.assign({}, n)); RACK_CLIP.root = rootKey(ch); hint('Copied ' + RACK_CLIP.length + ' notes of ' + ch.name); } },
+      { label: 'Paste notes', disabled: !RACK_CLIP, hint: 'Adds the copied notes to this channel in this pattern', action: () => edit(() => { pat.notes[ch.id] = (pat.notes[ch.id] || []).concat(RACK_CLIP.map(n => Object.assign({}, n, { key: clamp(n.key - RACK_CLIP.root + rootKey(ch), 0, 127) }))); growPattern(pat); }) },
       { label: 'Clear repeats', disabled: !(pat.notes[ch.id] || []).some(n => n.rep > 1), action: () => edit(() => { for (const n of pat.notes[ch.id] || []) delete n.rep; }) },
       { label: 'Clear in this pattern', action: () => edit(() => { delete pat.notes[ch.id]; }) },
       { sep: true },
       { label: 'Move up', disabled: i === 0, action: () => edit(() => { P.channels.splice(i, 1); P.channels.splice(i - 1, 0, ch); }) },
       { label: 'Move down', disabled: i === P.channels.length - 1, action: () => edit(() => { P.channels.splice(i, 1); P.channels.splice(i + 1, 0, ch); }) },
       { label: 'Duplicate channel', action: () => edit(() => { const c = JSON.parse(JSON.stringify(ch)); c.id = uid(); c.name = ch.name + ' 2'; P.channels.splice(i + 1, 0, c); for (const q of P.patterns) if (q.notes[ch.id]) q.notes[c.id] = JSON.parse(JSON.stringify(q.notes[ch.id])); S.ch = c.id; if (NATIVE.on && ch.plugin) NATIVE.call('copyPluginState', ch.id, c.id); }) },
+      { label: 'Clone channel (settings only)', hint: 'Same instrument and settings, no notes', action: () => edit(() => { const c = JSON.parse(JSON.stringify(ch)); c.id = uid(); c.name = ch.name + ' 2'; P.channels.splice(i + 1, 0, c); S.ch = c.id; if (NATIVE.on && ch.plugin) NATIVE.call('copyPluginState', ch.id, c.id); }) },
+      { label: 'Replace instrument…', hint: 'Swap the sound, keep the notes and routing', action: () => openMenu(x + 20, y + 20, replaceMenuItems(ch)) },
+      { label: 'Route to a free mixer insert', action: () => routeToFreeInsert(ch) },
       { head: 'Colour' }, ...PALETTE.map(c => ({ label: c === ch.color ? 'Current' : '', swatch: c, action: () => edit(() => { ch.color = c; }) })),
       { sep: true },
       { label: 'Delete channel', danger: true, action: () => edit(() => { P.channels.splice(P.channels.indexOf(ch), 1); for (const q of P.patterns) delete q.notes[ch.id]; if (S.ch === ch.id) S.ch = P.channels[0] ? P.channels[0].id : null; }) },

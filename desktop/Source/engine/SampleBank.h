@@ -20,6 +20,7 @@ struct SampleData
     juce::AudioBuffer<float> buffer;
     juce::AudioBuffer<float> reversed;   // filled on demand (message thread)
     double sampleRate = 48000;
+    float normGain = 1.0f;               // brings the loudest sample to 0 dBFS (sampler Normalize)
     juce::String name;
     std::atomic<bool> hasReversed { false };
 };

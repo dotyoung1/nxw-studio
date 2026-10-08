@@ -44,6 +44,9 @@ std::shared_ptr<SampleData> SampleBank::decode (std::unique_ptr<juce::InputStrea
     const int chans = juce::jlimit (1, 2, (int) reader->numChannels);
     s->buffer.setSize (chans, len);
     reader->read (&s->buffer, 0, len, 0, true, chans > 1);
+    float pk = 0;
+    for (int c = 0; c < chans; ++c) pk = juce::jmax (pk, s->buffer.getMagnitude (c, 0, len));
+    s->normGain = pk > 1.0e-5f ? juce::jmin (64.0f, 1.0f / pk) : 1.0f;
     s->name = name;
     return s;
 }
