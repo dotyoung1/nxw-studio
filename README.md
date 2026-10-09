@@ -84,6 +84,12 @@ from Steinberg under its own licence and is not included here.
 
 The web version: `python web/build.py browser` writes `web/dist/nxw-studio.html`.
 
+## Working on it together
+
+Contributors (and their Claude) should read [`CLAUDE.md`](CLAUDE.md) first: where everything is,
+the rules that keep the browser and desktop engines in step, how to test, and how we use
+branches, pull requests and releases.
+
 ## How it fits together
 
 ```
